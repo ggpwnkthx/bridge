@@ -14,6 +14,11 @@
   --muted: #98a1b3;
   --accent: #5b9dff;
   --accent-soft: rgba(91, 157, 255, 0.14);
+  --on-accent: #08111f;
+  --scrim: rgba(4, 6, 10, 0.6);
+  --fault-line: rgba(255, 107, 107, 0.4);
+  --fault-edge: rgba(255, 107, 107, 0.35);
+  --confirm-line: rgba(74, 222, 128, 0.4);
   --danger: #ff6b6b;
   --ok: #4ade80;
   --radius: 10px;
@@ -39,6 +44,14 @@ body {
     sans-serif;
 }
 
+/* The room around the screen of the phone. */
+
+body {
+  padding-top: env(safe-area-inset-top);
+  padding-left: env(safe-area-inset-left);
+  padding-right: env(safe-area-inset-right);
+}
+
 button,
 input,
 select,
@@ -47,16 +60,74 @@ textarea {
   color: inherit;
 }
 
+/* The focus of the keyboard */
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* The way around the frame */
+
+.skip-link {
+  position: absolute;
+  z-index: 20;
+  inset-block-start: 8px;
+  inset-inline-start: 8px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: var(--accent);
+  color: var(--on-accent);
+  font-weight: 600;
+  text-decoration: none;
+  transform: translateY(-250%);
+}
+
+.skip-link:focus {
+  transform: none;
+}
+
+/* A name that is read and not seen */
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
 /* The frame */
 
 .topbar {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  gap: 10px;
   height: 56px;
-  padding: 0 20px;
+  padding-inline: 20px;
   border-bottom: 1px solid var(--line);
   background: var(--panel);
+}
+
+/* The way to the collections, on a small screen. */
+
+.menu {
+  display: none;
+  align-items: center;
+  padding: 7px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel-2);
+  color: var(--text);
+  cursor: pointer;
+}
+
+.menu:hover {
+  border-color: var(--accent);
 }
 
 .brand {
@@ -79,8 +150,11 @@ textarea {
   display: flex;
   align-items: center;
   gap: 12px;
+  margin-inline-start: auto;
   color: var(--muted);
   font-size: 13px;
+  white-space: nowrap;
+  overflow: hidden;
 }
 
 .identity strong {
@@ -94,10 +168,19 @@ textarea {
   height: calc(100% - 56px);
 }
 
+/* The scrim of the collections, on a small screen. */
+
+.sidebar-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 11;
+  background: var(--scrim);
+}
+
 .sidebar {
   display: flex;
   flex-direction: column;
-  border-right: 1px solid var(--line);
+  border-inline-end: 1px solid var(--line);
   background: var(--panel);
   overflow-y: auto;
 }
@@ -139,7 +222,7 @@ textarea {
   border: 0;
   border-radius: 8px;
   background: transparent;
-  text-align: left;
+  text-align: start;
   cursor: pointer;
 }
 
@@ -173,8 +256,10 @@ textarea {
   text-transform: uppercase;
 }
 
+/* The tag of the collection that is open: it is cut out of the row, and
+   its label keeps the accent of the row. */
 .collection.active .tag {
-  background: rgba(91, 157, 255, 0.2);
+  background: var(--panel);
   color: var(--accent);
 }
 
@@ -193,7 +278,7 @@ textarea {
   border-radius: 6px;
   background: transparent;
   color: var(--muted);
-  text-align: left;
+  text-align: start;
   cursor: pointer;
 }
 
@@ -202,9 +287,17 @@ textarea {
   color: var(--text);
 }
 
+/* The view that is open. */
+
+.link.active {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
 .content {
   overflow: auto;
-  padding: 20px 24px 48px;
+  padding-block: 20px 48px;
+  padding-inline: 24px;
 }
 
 .placeholder {
@@ -222,13 +315,35 @@ textarea {
 }
 
 .toolbar h1 {
-  margin: 0 12px 0 0;
+  margin: 0;
+  margin-inline-end: 12px;
   font-size: 17px;
   font-weight: 600;
 }
 
+/* What the collection holds, in the words of the backend. */
+
+.collection-description {
+  margin: -6px 0 12px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+/* What the studio is doing while it waits. */
+
+.loading {
+  padding: 24px 12px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
 .toolbar .spacer {
   flex: 1;
+}
+
+.toolbar-label {
+  color: var(--muted);
+  font-size: 12px;
 }
 
 input,
@@ -267,7 +382,7 @@ button.danger {
 button.primary {
   border-color: transparent;
   background: var(--accent);
-  color: #08111f;
+  color: var(--on-accent);
   font-weight: 600;
 }
 
@@ -277,7 +392,7 @@ button.ghost:hover {
 
 button.danger {
   color: var(--danger);
-  border-color: rgba(255, 107, 107, 0.35);
+  border-color: var(--fault-edge);
 }
 
 button:disabled {
@@ -303,7 +418,7 @@ table {
 th,
 td {
   padding: 9px 12px;
-  text-align: left;
+  text-align: start;
   border-bottom: 1px solid var(--line);
   white-space: nowrap;
   max-width: 320px;
@@ -330,7 +445,9 @@ tbody tr:hover {
   background: var(--panel-2);
 }
 
-td.mono {
+/* The face of the names the backend gave. */
+
+.mono {
   font-family: var(--mono);
   font-size: 12px;
 }
@@ -338,6 +455,46 @@ td.mono {
 td.null {
   color: var(--muted);
   font-style: italic;
+}
+
+/* The first cell of a row opens the record with the keyboard. */
+
+.row-open {
+  display: block;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* The focus of the row is always seen: the row is the way to the
+   record, and the focus of the keyboard must never be lost in it. */
+
+.row-open:focus {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* The table without a row. */
+
+td.empty {
+  padding: 28px 12px;
+  color: var(--muted);
+  text-align: center;
+}
+
+td.empty strong {
+  display: block;
+  color: var(--text);
+  font-weight: 600;
 }
 
 .pager {
@@ -358,8 +515,14 @@ td.null {
 }
 
 .notice.error {
-  border-color: rgba(255, 107, 107, 0.4);
+  border-color: var(--fault-line);
   color: var(--danger);
+}
+
+.notice-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
 }
 
 /* The drawer of a record */
@@ -367,19 +530,21 @@ td.null {
 .drawer-backdrop {
   position: fixed;
   inset: 0;
-  background: rgba(4, 6, 10, 0.6);
+  z-index: 13;
+  background: var(--scrim);
 }
 
 .drawer {
   position: fixed;
-  top: 0;
-  right: 0;
-  bottom: 0;
+  inset-block: 0;
+  inset-inline-end: 0;
+  z-index: 14;
   width: min(520px, 92vw);
-  padding: 18px 20px 40px;
+  padding-block: 18px 40px;
+  padding-inline: 20px;
   overflow-y: auto;
   background: var(--panel);
-  border-left: 1px solid var(--line);
+  border-inline-start: 1px solid var(--line);
 }
 
 .drawer h2 {
@@ -413,6 +578,21 @@ td.null {
   width: 100%;
 }
 
+/* A box is a box: it keeps its own size. */
+
+.field input[type="checkbox"] {
+  width: auto;
+}
+
+/* A field the caller may not write stays visible and legible. */
+
+.field input:disabled,
+.field select:disabled {
+  color: var(--muted);
+  -webkit-text-fill-color: var(--muted);
+  cursor: not-allowed;
+}
+
 .field .hint {
   margin-top: 3px;
   color: var(--muted);
@@ -425,16 +605,32 @@ td.null {
   margin-top: 18px;
 }
 
+.drawer-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.drawer-question {
+  align-self: center;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.drawer-notice:empty {
+  display: none;
+}
+
 /* The messages */
 
 .toasts {
   position: fixed;
-  right: 18px;
-  bottom: 18px;
+  inset-block-end: 18px;
+  inset-inline-end: 18px;
   display: flex;
   flex-direction: column;
   gap: 8px;
-  z-index: 10;
+  z-index: 15;
 }
 
 .toast {
@@ -447,30 +643,180 @@ td.null {
 }
 
 .toast.error {
-  border-color: rgba(255, 107, 107, 0.4);
+  border-color: var(--fault-line);
   color: var(--danger);
 }
 
 .toast.ok {
-  border-color: rgba(74, 222, 128, 0.4);
+  border-color: var(--confirm-line);
   color: var(--ok);
-}
-
-.panel {
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-  background: var(--panel);
-  padding: 16px;
-  margin-bottom: 16px;
-}
-
-.panel h2 {
-  margin: 0 0 10px;
-  font-size: 14px;
 }
 
 .advanced summary {
   cursor: pointer;
   color: var(--muted);
   font-size: 12px;
+}
+
+/* The small screen
+ *
+ * The studio is a table of rows and a drawer. On a small screen the
+ * frame gives way to the content: the collections go off the canvas,
+ * behind the way to them, and the table keeps its own scroll. The
+ * density of the table is not a thing that a small screen takes away.
+ */
+
+@media (max-width: 1023px) {
+  .layout {
+    grid-template-columns: 1fr;
+  }
+
+  .sidebar {
+    position: fixed;
+    inset-block: 0;
+    inset-inline-start: 0;
+    width: min(300px, 84vw);
+    z-index: 12;
+    visibility: hidden;
+    transform: translateX(-100%);
+  }
+
+  :dir(rtl) .sidebar {
+    transform: translateX(100%);
+  }
+
+  .sidebar.open {
+    visibility: visible;
+    transform: none;
+  }
+
+  .menu {
+    display: inline-flex;
+  }
+
+  .content {
+    padding-block: 16px 32px;
+    padding-inline: 16px;
+  }
+}
+
+@media (max-width: 639px) {
+  .brand-sub,
+  .identity-roles {
+    display: none;
+  }
+
+  .collection-description {
+    margin: -4px 0 10px;
+  }
+
+  .toolbar input[type="search"] {
+    flex: 1 1 100%;
+  }
+
+  .toolbar input[type="text"] {
+    flex: 1 1 45%;
+  }
+
+  .toolbar input[type="number"] {
+    flex: 0 0 76px;
+  }
+
+  .toolbar > label.toolbar-label {
+    flex: 0 0 auto;
+  }
+
+  .toolbar button {
+    flex: 1 1 auto;
+  }
+
+  .toolbar .advanced {
+    flex: 1 1 100%;
+  }
+
+  .toolbar .spacer {
+    display: none;
+  }
+
+  .drawer {
+    width: 100%;
+    padding-block-end: max(40px, env(safe-area-inset-bottom));
+  }
+
+  .toasts {
+    inset-inline: 16px;
+    inset-block-end: max(18px, env(safe-area-inset-bottom));
+  }
+}
+
+/* The finger
+ *
+ * The size of a finger is not the size of a cursor: every control that
+ * can be reached with a finger is 44 pixels high, and the fields of the
+ * studio are 16 pixels, so that the phone does not zoom under the
+ * finger.
+ */
+
+@media (pointer: coarse) {
+  input,
+  select,
+  textarea {
+    min-height: 44px;
+    font-size: 16px;
+  }
+
+  button.primary,
+  button.ghost,
+  button.danger,
+  .menu {
+    min-height: 44px;
+    padding-block: 10px;
+  }
+
+  .collection {
+    min-height: 44px;
+  }
+
+  .link {
+    display: flex;
+    align-items: center;
+    min-height: 44px;
+  }
+
+  .row-open {
+    display: flex;
+    align-items: center;
+    min-height: 44px;
+  }
+
+  .skip-link {
+    display: inline-flex;
+    align-items: center;
+    min-height: 44px;
+  }
+}
+
+/* The finger does not hover
+ *
+ * A hover that stays after a tap is a state that lies. Where there is
+ * no pointer, there is no hover.
+ */
+
+@media (hover: none) {
+  .collection:not(.active):hover {
+    background: transparent;
+  }
+
+  .link:hover {
+    background: transparent;
+    color: var(--muted);
+  }
+
+  tbody tr:hover {
+    background: transparent;
+  }
+
+  button.ghost:hover {
+    border-color: var(--line);
+  }
 }

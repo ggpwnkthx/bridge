@@ -19,21 +19,25 @@ export interface Attributes {
   readonly value?: string
   readonly placeholder?: string
   readonly title?: string
-  readonly href?: string
-  readonly hidden?: boolean
   readonly disabled?: boolean
-  readonly checked?: boolean
   readonly name?: string
   readonly rows?: number
   readonly min?: string
   readonly max?: string
-  readonly step?: string
   readonly form?: string
-  readonly spellcheck?: boolean
+  readonly role?: string
+  readonly scope?: string
+  readonly for?: string
+  readonly tabindex?: number
+  readonly colspan?: number
   readonly dataset?: Record<string, string>
   readonly on?: Partial<{
     [Event in keyof HTMLElementEventMap]: (event: HTMLElementEventMap[Event]) => void
   }>
+  /** The states of the accessibility, written as they are written in the html. */
+  readonly [key: `aria-${string}`]: string | undefined
+  /** The hooks of the studio, written as they are written in the html. */
+  readonly [key: `data-${string}`]: string | undefined
 }
 
 /** Creates an element. */
@@ -86,4 +90,16 @@ export function renderValue(value: unknown): string {
 /** Reports whether a value is empty. */
 export function isEmpty(value: unknown): boolean {
   return value === null || value === undefined || value === ''
+}
+
+/**
+ * A count and its noun.
+ *
+ * The studio writes the counts of the backend for the caller, and the
+ * count is written the way the language writes it: one row, two rows.
+ */
+export function plural(count: number, one: string, many?: string): string {
+  const form = new Intl.PluralRules().select(count)
+  const noun = form === 'one' ? one : (many ?? `${one}s`)
+  return `${new Intl.NumberFormat().format(count)} ${noun}`
 }
