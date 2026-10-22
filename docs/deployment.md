@@ -41,7 +41,6 @@ the studio refuses a workspace it does not serve.
       "id": "studio",
       "match": { "host": "studio.example.com", "path": "/w/{workspaceId}/" },
       "upstream": "http://bridge:8081",
-      "rewrite": "/w/{workspaceId}/{rest}",
       "auth": { "mode": "none" }
     },
     {
@@ -62,6 +61,12 @@ Two remarks about that file:
   the gateway, not by the session of the gateway,
 - the route of the backend is `mode: any`: the studio presents the token
   of the caller as a bearer token, and the gateway accepts it.
+
+The session of the gateway never reaches the studio: the gateway removes
+its own cookies from the requests it forwards, because a session id is a
+credential of the caller. The studio cannot reuse it, and it does not
+try to: it holds a session of its own, and it presents the token of the
+caller to the route of the backend.
 
 ## The configuration of the broker
 
