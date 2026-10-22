@@ -1,3 +1,7 @@
+/.*
+!.gitignore
+!.env.example
+
 # Logs
 logs
 *.log
@@ -111,3 +115,6 @@ dist
 
 # TernJS port file
 .tern-port
+
+# The assets of the studio are built from the sources.
+public/

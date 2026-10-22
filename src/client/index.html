@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="en">
+  <!--
+    The shell of the user interface of the studio.
+
+    The shell holds the frame of the application and nothing else: the
+    collections, the rows and the metadata are read from the api of the
+    studio, and they are rendered by the script of the browser.
+
+    The workspace is written into the document by the server: it is the
+    workspace of the path, and the server has already checked that the
+    studio may serve it.
+  -->
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="referrer" content="same-origin" />
+    <title>Bridge — the studio of the data backend</title>
+    <link rel="stylesheet" href="/assets/styles.css" />
+    <link rel="icon" href="data:," />
+  </head>
+  <body data-workspace="__BRIDGE_WORKSPACE__">
+    <div id="app" class="app">
+      <header class="topbar">
+        <div class="brand">
+          <span class="brand-mark">Bridge</span>
+          <span class="brand-sub">the studio of the data backend</span>
+        </div>
+        <div class="identity" id="identity"></div>
+      </header>
+      <div class="layout">
+        <aside class="sidebar">
+          <div class="sidebar-head">
+            <span class="sidebar-title">Collections</span>
+            <span class="workspace" id="workspace"></span>
+          </div>
+          <nav class="collections" id="collections"></nav>
+          <div class="sidebar-foot">
+            <button class="link" id="show-aggregate" type="button">Aggregate</button>
+            <button class="link" id="show-audit" type="button">Audit log</button>
+            <button class="link" id="logout" type="button">Log out</button>
+          </div>
+        </aside>
+        <main class="content" id="content">
+          <div class="placeholder">Loading the studio…</div>
+        </main>
+      </div>
+    </div>
+    <div class="drawer-backdrop" id="drawer-backdrop" hidden></div>
+    <aside class="drawer" id="drawer" hidden aria-label="The record"></aside>
+    <div class="toasts" id="toasts"></div>
+    <script type="module" src="/assets/studio.js"></script>
+  </body>
+</html>

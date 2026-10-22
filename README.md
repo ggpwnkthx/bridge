@@ -1,1 +1,104 @@
-# bridge
+# Bridge
+
+The **studio** of the headless data backend.
+
+Bridge is a stand-alone web application that shows the data of a
+workspace of [Depot](https://github.com/ggpwnkthx/depot) and lets a
+caller change it: the collections, the rows, the aggregates and the audit
+log. It is a **client** of the backend, like any other client: it knows
+the contract of the version `v1` of the API and nothing else. It never
+reaches the database, it never reads a manifest and it never decides
+what a caller may do.
+
+- **Runtime:** TypeScript on Bun 1.4.3, Hono at the HTTP boundary.
+- **Identity:** the callers authenticate against
+  [Hub](https://github.com/ggpwnkthx/hub), the broker of the platform,
+  with the authorization code flow and PKCE.
+- **Gateway:** every call to the backend goes through
+  [Shuttle](https://github.com/ggpwnkthx/shuttle), which signs the
+  identity of the caller. The studio never signs anything itself.
+
+## The shape of the studio
+
+```
+browser ──▶ Shuttle ──▶ Bridge ──▶ Shuttle ──▶ Depot
+                │                      │            │
+                │                      └────────────┴──▶ Hub
+                │                                        (the decisions,
+                │                                         the access context)
+                └──▶ Hub (the login of the caller)
+```
+
+The studio is deployed **behind the gateway**: the gateway authenticates
+the browser, it signs the identity of the caller, and the backend
+verifies that signature. The studio verifies it too, and it refuses a
+request that did not come through the gateway.
+
+The studio holds the token of the caller on its own server: the browser
+holds an opaque identifier of a session and nothing else. Every call of
+the script of the browser goes to the studio, and the studio calls the
+backend with the token of the caller.
+
+## The commands
+
+| Command | What it does |
+| --- | --- |
+| `bun install` | The dependencies of the studio. |
+| `bun run build` | The bundle of the script of the browser. |
+| `bun run start` | The studio. |
+| `bun run dev` | The studio, with a reload of the server. |
+| `bun run typecheck` | The types of the whole repository. |
+| `bun run lint` / `bun run format:check` | The style of the repository. |
+| `bun test test/unit` | The rules of the domains. |
+| `bun test test/contract` | The contract of the http surface. |
+
+## The development machine
+
+The studio needs three services: the broker, the gateway and the backend.
+The repository of the platform has a runner for the gateway and its
+fixtures, and the repositories of the broker and of the backend have
+their own.
+
+```bash
+bun install
+cp .env.example .env                       # and change the values
+bun run build
+bun run start
+```
+
+The studio listens on `http://localhost:8081` by default. It redirects
+the browser to the broker for the login, and it comes back to
+`/w/{workspaceId}/` when the login is complete.
+
+## The configuration
+
+| The variable | What it holds |
+| --- | --- |
+| `BRIDGE_PUBLIC_URL` | The url the browser reaches the studio under. It is the redirect uri of the login. |
+| `BRIDGE_GATEWAY_URL` | The base url of the gateway. Every call to the backend goes through it. |
+| `BRIDGE_HUB_URL` | The base url of the broker. |
+| `BRIDGE_HUB_CLIENT_ID` / `BRIDGE_HUB_CLIENT_SECRET` | The client of the studio at the broker. |
+| `BRIDGE_WORKSPACES` | The workspaces the studio may serve. It is required in a production environment. |
+| `BRIDGE_GATEWAY_IDENTITY_PUBLIC_KEY` | The public key of the gateway, for the signature `v5`. |
+| `BRIDGE_GATEWAY_IDENTITY_KEY` | The derived key of the gateway, in base64, for the signature `v4`. |
+| `BRIDGE_REQUIRE_GATEWAY_IDENTITY` | Whether a request that did not go through the gateway is refused. |
+| `BRIDGE_BIND_GATEWAY_WORKSPACE` | Whether the workspace of the gateway has to be the workspace of the studio. |
+
+The whole list is in [`.env.example`](.env.example) and the rules are in
+[`src/platform/config.ts`](src/platform/config.ts).
+
+## The documentation
+
+| Document | What it holds |
+| --- | --- |
+| [`docs/spec.md`](docs/spec.md) | The behavior of the studio, section by section. |
+| [`docs/api.md`](docs/api.md) | The http surface of the studio: every route, its request and its answer. |
+| [`docs/architecture.md`](docs/architecture.md) | The layout of the code and the boundaries of the domains. |
+| [`docs/operations.md`](docs/operations.md) | The probes, the logs, the configuration and the failures. |
+| [`docs/deployment.md`](docs/deployment.md) | The wiring of the studio with the gateway, the broker and the backend. |
+
+## The status of the release
+
+The studio is at `0.1.0`. It implements the contract of the version `v1`
+of the backend and it passes its own gates, but it has never run outside
+its own tests and it has no production history.
