@@ -20,7 +20,10 @@ const assets: Assets = {
   },
   async file(path) {
     if (path !== 'assets/studio.js') return null
-    return { body: new TextEncoder().encode('export const studio = true').buffer, contentType: 'text/javascript' }
+    return {
+      body: new TextEncoder().encode('export const studio = true').buffer,
+      contentType: 'text/javascript',
+    }
   },
 }
 
