@@ -13,6 +13,8 @@
     "start": "bun run src/main.ts",
     "predev": "bun run build",
     "dev": "bun --watch src/main.ts",
+    "dev:stack": "bun run scripts/dev-stack.ts",
+    "dev:smoke": "bun run scripts/dev-smoke.ts",
     "typecheck": "tsc --noEmit",
     "lint": "biome lint .",
     "format": "biome format --write .",

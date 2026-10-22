@@ -33,7 +33,7 @@ const app = createApp({
   sessions: new MemorySessionStore({ ttlSeconds: config.sessionTtlSeconds }),
   logins: new MemoryLoginStateStore(),
   oidc,
-  assets: createAssets({ directory: new URL('../../public', import.meta.url).pathname }),
+  assets: createAssets({ directory: new URL('../public', import.meta.url).pathname }),
   logger,
 })
 

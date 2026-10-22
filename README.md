@@ -47,6 +47,8 @@ backend with the token of the caller.
 | `bun run build` | The bundle of the script of the browser. |
 | `bun run start` | The studio. |
 | `bun run dev` | The studio, with a reload of the server. |
+| `bun run dev:stack` | The studio **and** the broker, the gateway and the backend, in one process. |
+| `bun run dev:smoke` | The login of a caller and a write, through the whole stack. |
 | `bun run typecheck` | The types of the whole repository. |
 | `bun run lint` / `bun run format:check` | The style of the repository. |
 | `bun test test/unit` | The rules of the domains. |
@@ -58,6 +60,27 @@ The studio needs three services: the broker, the gateway and the backend.
 The repository of the platform has a runner for the gateway and its
 fixtures, and the repositories of the broker and of the backend have
 their own.
+
+The runner of this repository starts the four services, the database and
+the fixtures of a development machine in one process. It needs the three
+other checkouts next to this one, and the binaries of PostgreSQL:
+
+```
+bridge/  depot/  hub/  shuttle/
+```
+
+```bash
+bun install
+bun run dev:stack
+```
+
+The studio answers at `http://localhost:8081/w/{workspaceId}/`, the
+gateway at `http://localhost:8080`, the broker at `http://localhost:8082`
+and the backend at `http://localhost:8083`. The caller signs in with
+`alice@shuttle.test` / `alice-password`. The wiring is described in
+[`docs/development.md`](docs/development.md).
+
+To run the studio alone, against services that are already up:
 
 ```bash
 bun install
@@ -96,6 +119,7 @@ The whole list is in [`.env.example`](.env.example) and the rules are in
 | [`docs/architecture.md`](docs/architecture.md) | The layout of the code and the boundaries of the domains. |
 | [`docs/operations.md`](docs/operations.md) | The probes, the logs, the configuration and the failures. |
 | [`docs/deployment.md`](docs/deployment.md) | The wiring of the studio with the gateway, the broker and the backend. |
+| [`docs/development.md`](docs/development.md) | The development machine: the runner of the four services and its fixtures. |
 
 ## The status of the release
 

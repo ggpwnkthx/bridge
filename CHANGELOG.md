@@ -3,6 +3,22 @@
 The format follows [Keep a Changelog](https://keepachangelog.com), and
 the versions follow [semantic versioning](https://semver.org).
 
+## Unreleased
+
+### Added
+
+- The runner of the development machine: `bun run dev:stack` starts the
+  studio, the broker, the gateway and the backend, with the database and
+  the fixtures of a development machine, and `bun run dev:smoke` drives
+  the login of a caller and a write through the whole stack. The wiring
+  is described in [`docs/development.md`](docs/development.md).
+
+### Fixed
+
+- The path of the built assets: the studio resolved the directory of its
+  user interface one level above the repository, so it answered `503`
+  to the shell of the studio and served no script to the browser.
+
 ## 0.1.0
 
 The first release of the studio.
