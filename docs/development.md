@@ -96,6 +96,33 @@ identity provider), reads the catalog of the workspace, reads a
 collection and writes a row. It fails with the message of the service
 that refused.
 
+## The test of the interface
+
+The smoke test proves the flow of the api. The interface of the studio
+is another matter: it is the script of a browser, and it is proved in a
+browser, against the same development machine:
+
+```bash
+bun run dev:ui
+```
+
+It signs a caller in the way a browser does, and it checks the shapes
+the studio shows — a field that has no value is an empty field, a field
+of lines is a field of lines, a field that cannot be empty does not
+offer the empty choice — and it writes a record and reads it back, with
+its lines and with its cleared field. It runs axe over the rows and over
+the drawer of a record, and it fails on a serious violation.
+
+It needs the browser of Playwright:
+
+```bash
+bunx playwright@1.64.1 install chromium
+```
+
+The runner of the continuous integration does the same, with the four
+repositories next to each other and the database of the development
+machine.
+
 ## Running the services by hand
 
 The runner is a convenience, not a requirement. The four services can be

@@ -1,0 +1,74 @@
+name: the gates of the studio
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: the gates of the studio
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  gates:
+    name: the gates of the repository
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - run: bun install --frozen-lockfile
+      - run: bun run typecheck
+      - run: bun run lint
+      - run: bun run format:check
+      - run: bun test test/unit test/contract
+
+  interface:
+    name: the interface of the studio
+    runs-on: ubuntu-latest
+    steps:
+      # The studio needs the three other services of the platform: the
+      # runner of the development machine looks for them next to it.
+      - uses: actions/checkout@v4
+        with:
+          repository: ggpwnkthx/bridge
+          path: bridge
+      - uses: actions/checkout@v4
+        with:
+          repository: ggpwnkthx/depot
+          path: depot
+      - uses: actions/checkout@v4
+        with:
+          repository: ggpwnkthx/hub
+          path: hub
+      - uses: actions/checkout@v4
+        with:
+          repository: ggpwnkthx/shuttle
+          path: shuttle
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - name: the database of the development machine
+        run: sudo apt-get update && sudo apt-get install -y postgresql-16
+      - name: the dependencies
+        run: |
+          for service in bridge depot hub shuttle; do
+            (cd "$service" && bun install --frozen-lockfile)
+          done
+      - name: the browser of the test
+        working-directory: bridge
+        run: bunx playwright@1.64.1 install --with-deps chromium
+      - name: the interface of the studio
+        working-directory: bridge
+        run: |
+          bun run dev:stack > /tmp/stack.log 2>&1 &
+          for _ in $(seq 1 90); do
+            if curl -sf http://localhost:8081/healthz > /dev/null; then break; fi
+            sleep 1
+          done
+          bun run dev:ui

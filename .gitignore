@@ -1,6 +1,7 @@
 /.*
 !.gitignore
 !.env.example
+!/.github
 
 # Logs
 logs

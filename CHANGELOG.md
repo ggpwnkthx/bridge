@@ -7,6 +7,11 @@ the versions follow [semantic versioning](https://semver.org).
 
 ### Added
 
+- The test of the interface of the studio: `bun run dev:ui` drives it in
+  a browser, against the development machine, and checks the shapes the
+  studio shows, the writes it makes and its accessibility with axe. The
+  runner of the continuous integration runs it with the gates of the
+  repository.
 - The runner of the development machine: `bun run dev:stack` starts the
   studio, the broker, the gateway and the backend, with the database and
   the fixtures of a development machine, and `bun run dev:smoke` drives
@@ -61,6 +66,8 @@ the versions follow [semantic versioning](https://semver.org).
   that held a value and that the caller emptied is written as null now.
 - A field of a collection that cannot be empty: the studio offered the
   empty choice in a menu of values that the record cannot hold.
+- The drawer of a record was a complementary landmark with the role of a
+  dialog; it is a dialog now.
 - A field of a record that had no value: the studio wrote the word
   "null" in the control and sent it back, and the validator of the
   backend refused every change of a record with an empty field. A field

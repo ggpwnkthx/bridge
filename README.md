@@ -49,6 +49,7 @@ backend with the token of the caller.
 | `bun run dev` | The studio, with a reload of the server. |
 | `bun run dev:stack` | The studio **and** the broker, the gateway and the backend, in one process. |
 | `bun run dev:smoke` | The login of a caller and a write, through the whole stack. |
+| `bun run dev:ui` | The interface of the studio in a browser: its shapes, its writes and its accessibility. |
 | `bun run typecheck` | The types of the whole repository. |
 | `bun run lint` / `bun run format:check` | The style of the repository. |
 | `bun test test/unit` | The rules of the domains. |
