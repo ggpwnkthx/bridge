@@ -265,6 +265,8 @@ The form language is *instrument-like*: flat, bordered, small-radius, and unifor
 - **Style:** Raised Slate fill, 1px Hairline border, 8px radius, `7px 10px` padding, 14px type. Textareas are monospace at 12px, `min-height: 120px`, full width — they hold JSON.
 - **A field of lines is a field of lines.** A field of the type `text` is a textarea, in the monospace face: the lines of a body stay lines, and a body is never cut to its first line.
 - **A field that has no value is an empty field.** The studio never writes the word "null" in a control, and it never sends a value it did not read. An empty field is left as it is.
+- **The studio writes the value the field declares.** A number for an integer, the document for a json, and the text for everything else — the backend is the authority on what a record may hold, and the studio does not change a value it cannot type. A value it cannot type is written as it was read, and the backend refuses it.
+- **A field that the caller emptied and that held a value is written as null.** The caller cleared it. A field that held nothing is not written at all.
 - **Focus:** the border becomes Signal Blue. No glow, no ring, no shadow.
 - **Error / Disabled:** a disabled field (one the caller may not write) keeps the same look and is simply not editable — it is never visually redacted, because the operator must be able to see the value they are not allowed to change.
 - **Labels:** the drawer field label is a micro-label above the control, with `*` marking a required field, and the field description as an 11px hint below it.

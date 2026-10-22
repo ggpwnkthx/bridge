@@ -16,6 +16,7 @@
 import { Api, ApiError } from './api'
 import { clear, h, isEmpty, plural, renderValue } from './dom'
 import type { Child } from './dom'
+import { fieldValue } from './values'
 
 /** The metadata of a field of a collection. */
 interface FieldMetadata {
@@ -137,6 +138,13 @@ let pending = false
 
 /** Whether the delete of the record waits for a second answer. */
 let deleteArmed = false
+
+/** A control of the drawer, the field it holds, and what the record held. */
+interface Control {
+  input: HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement
+  field: FieldMetadata
+  held: unknown
+}
 
 /** The start of the studio. */
 async function main(): Promise<void> {
@@ -675,7 +683,7 @@ function renderDrawer(
   clear(elements.drawer)
   deleteArmed = false
   const writable = new Set(collection.writableFields)
-  const inputs = new Map<string, HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>()
+  const controls = new Map<string, Control>()
 
   const fields = collection.fields.filter(
     (field) => collection.readableFields.includes(field.name) || writable.has(field.name)
@@ -688,7 +696,7 @@ function renderDrawer(
       on: {
         submit: (event) => {
           event.preventDefault()
-          void save(collection, id, etag, inputs)
+          void save(collection, id, etag, controls)
         },
       },
     },
@@ -707,7 +715,10 @@ function renderDrawer(
         ? h(
             'select',
             {},
-            h('option', { value: '' }, '—'),
+            // A field that cannot be empty does not offer the empty
+            // choice: the studio never offers a state the record
+            // cannot hold.
+            field.nullable ? h('option', { value: '' }, '—') : null,
             ...field.enum.map((option) => h('option', { value: option }, option))
           )
         : field.type === 'text'
@@ -724,7 +735,7 @@ function renderDrawer(
       if (input instanceof HTMLInputElement && input.type === 'checkbox') {
         input.checked = value === true || value === 'true'
       }
-      inputs.set(field.name, input)
+      controls.set(field.name, { input, field, held: value })
       const editable = writable.has(field.name)
       if (!editable) input.setAttribute('disabled', '')
       // The label of the field is bound to the control, and the hint of
@@ -750,7 +761,7 @@ function renderDrawer(
   )
 
   const notice = h('div', { class: 'drawer-notice' })
-  const actions = buildActions(collection, writable, id, etag, inputs)
+  const actions = buildActions(collection, writable, id, etag, controls)
 
   elements.drawer.append(
     h(
@@ -786,7 +797,7 @@ function buildActions(
   writable: Set<string>,
   id: string | null,
   etag: string,
-  inputs: Map<string, HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>
+  controls: Map<string, Control>
 ): HTMLElement {
   const canUpdate = collection.actions.includes('update') && writable.size > 0
   const canCreate = collection.actions.includes('create')
@@ -826,7 +837,7 @@ function buildActions(
           on: {
             click: () => {
               deleteArmed = false
-              refreshActions(collection, writable, id, etag, inputs, '[data-action="delete"]')
+              refreshActions(collection, writable, id, etag, controls, '[data-action="delete"]')
             },
           },
         },
@@ -854,7 +865,7 @@ function buildActions(
               class: 'primary',
               type: 'button',
               'data-action': 'save',
-              on: { click: () => void save(collection, id, etag, inputs) },
+              on: { click: () => void save(collection, id, etag, controls) },
             },
             'Save'
           )
@@ -869,7 +880,7 @@ function buildActions(
               on: {
                 click: () => {
                   deleteArmed = true
-                  refreshActions(collection, writable, id, etag, inputs, '[data-action="delete"]')
+                  refreshActions(collection, writable, id, etag, controls, '[data-action="delete"]')
                 },
               },
             },
@@ -901,11 +912,11 @@ function refreshActions(
   writable: Set<string>,
   id: string | null,
   etag: string,
-  inputs: Map<string, HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>,
+  controls: Map<string, Control>,
   focus?: string
 ): void {
   if (!drawerActions) return
-  const next = buildActions(collection, writable, id, etag, inputs)
+  const next = buildActions(collection, writable, id, etag, controls)
   drawerActions.replaceWith(next)
   drawerActions = next
   const target = focus ? next.querySelector<HTMLElement>(focus) : null
@@ -933,18 +944,21 @@ async function save(
   collection: CollectionMetadata,
   id: string | null,
   etag: string,
-  inputs: Map<string, HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>
+  controls: Map<string, Control>
 ): Promise<void> {
   // A change that is in flight is not sent again.
   if (pending) return
   const body: Record<string, unknown> = {}
-  for (const [name, input] of inputs) {
+  for (const [name, control] of controls) {
+    const { input, field, held } = control
     if (input.hasAttribute('disabled')) continue
-    if (input instanceof HTMLSelectElement && input.value === '') continue
     const raw =
       input instanceof HTMLInputElement && input.type === 'checkbox' ? input.checked : input.value
-    if (typeof raw === 'string' && raw.trim() === '') continue
-    body[name] = raw
+    // The studio writes the value the field declares, and it writes
+    // nothing for a field the caller did not change.
+    const written = fieldValue(field, raw, held)
+    if (!written.write) continue
+    body[name] = written.value
   }
   pending = true
   setActionsBusy(true)

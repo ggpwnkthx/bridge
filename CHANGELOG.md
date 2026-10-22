@@ -52,6 +52,15 @@ the versions follow [semantic versioning](https://semver.org).
 
 ### Fixed
 
+- The value of a field of a record: the studio wrote every value as
+  text, and the backend refuses a text for an integer and for a json. It
+  writes the value the field declares now: a number for an integer, the
+  document for a json, and the text for everything else.
+- A field of a record that the caller emptied: the studio left the old
+  value in place, because it wrote nothing for an empty field. A field
+  that held a value and that the caller emptied is written as null now.
+- A field of a collection that cannot be empty: the studio offered the
+  empty choice in a menu of values that the record cannot hold.
 - A field of a record that had no value: the studio wrote the word
   "null" in the control and sent it back, and the validator of the
   backend refused every change of a record with an empty field. A field
