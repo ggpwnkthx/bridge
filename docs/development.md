@@ -35,8 +35,15 @@ says what is missing when the machine does not have them:
 ```
 ✗ the binaries of PostgreSQL were not found: the machine needs "initdb"
   and "pg_ctl" — install PostgreSQL 15 or later (on Debian and Ubuntu:
-  apt install postgresql)
+  sudo apt install postgresql)
 ```
+
+The database of the stack is a dependency of the machine, and a
+machine without PostgreSQL gets it: the runner installs the packages of
+PostgreSQL with the package manager of the machine — `apt`, `dnf` or
+`brew` — when it can do it without asking for a password. The
+environment `DEV_SKIP_INSTALL=1` says that the runner installs
+nothing, and a machine without PostgreSQL is then an error.
 
 A major of PostgreSQL that the backend of the platform does not know is
 named for it, so the machine runs the server it holds.

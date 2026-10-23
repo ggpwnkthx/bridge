@@ -62,6 +62,7 @@ import {
   type Binaries,
   directories as postgresDirectories,
   find as findPostgres,
+  install as installPostgres,
   isKnown as isKnownMajor,
 } from './dev-postgres'
 
@@ -618,19 +619,40 @@ async function admin(
  * A major that the backend of the platform does not know is named with
  * the environment `POSTGRES_MAJOR`: the backend looks for the binaries
  * of the major of the machine.
+ *
+ * A machine without PostgreSQL gets it: the database of the stack is
+ * a dependency of the machine, and the machine installs it when it can
+ * do it without asking for a password.
  */
-function checkPostgres(): Binaries {
+async function checkPostgres(): Promise<Binaries> {
   const binaries = findPostgres()
-  if (!binaries) {
+  if (binaries) {
+    if (binaries.major !== null && !isKnownMajor(binaries.major)) {
+      process.env.POSTGRES_MAJOR = String(binaries.major)
+      step(`the binaries of PostgreSQL ${binaries.major} are at ${binaries.directory}`)
+    }
+    return binaries
+  }
+  // The machine has no PostgreSQL: the database of the stack is a
+  // dependency of the machine, and the machine installs it when it can
+  // do it without asking for a password.
+  if (process.env.DEV_SKIP_INSTALL === '1') {
     fail(
-      `the binaries of PostgreSQL were not found: the machine needs "initdb" and "pg_ctl" — install PostgreSQL 15 or later (on Debian and Ubuntu: apt install postgresql) — the directories that were looked for: ${postgresDirectories().slice(0, 6).join(', ')}`
+      `the binaries of PostgreSQL were not found and the install is skipped: install PostgreSQL 15 or later (on Debian and Ubuntu: sudo apt install postgresql)`
     )
   }
-  if (binaries.major !== null && !isKnownMajor(binaries.major)) {
-    process.env.POSTGRES_MAJOR = String(binaries.major)
-    step(`the binaries of PostgreSQL ${binaries.major} are at ${binaries.directory}`)
+  step('the binaries of PostgreSQL are installed')
+  const prefix = '\u001b[90mpostgres\u001b[0m │ '
+  const installed = await installPostgres((line) => console.log(`${prefix}${line}`))
+  if (!installed) {
+    fail(
+      `the binaries of PostgreSQL were not found and they could not be installed: the machine needs "initdb" and "pg_ctl" — install PostgreSQL 15 or later (on Debian and Ubuntu: sudo apt install postgresql) — the directories that were looked for: ${postgresDirectories().slice(0, 6).join(', ')}`
+    )
   }
-  return binaries
+  if (installed.major !== null && !isKnownMajor(installed.major)) {
+    process.env.POSTGRES_MAJOR = String(installed.major)
+  }
+  return installed
 }
 
 /**
@@ -688,7 +710,7 @@ async function main(): Promise<void> {
   mkdirSync(WORK_DIR, { recursive: true })
 
   // 0.1 The binaries of PostgreSQL of the machine.
-  const binaries = checkPostgres()
+  const binaries = await checkPostgres()
 
   // 0.2 The runs of the stack that came before this one.
   await stopPreviousRun()

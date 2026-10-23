@@ -16,8 +16,15 @@
  * machine is the answer.
  */
 
+import { spawn, spawnSync } from 'bun'
 import { existsSync, readdirSync } from 'node:fs'
 import { join } from 'node:path'
+import { exitCodeOf } from './spawn'
+
+/** A stream of bytes that can be read with `for await`. */
+type ByteStream = ReadableStream<Uint8Array> & {
+  [Symbol.asyncIterator](): AsyncIterator<Uint8Array>
+}
 
 /** The binaries that the machine needs to start the server. */
 const BINARIES = ['initdb', 'pg_ctl']
@@ -119,4 +126,129 @@ export function find(): Binaries | undefined {
 export function isKnown(major: number | null): boolean {
   if (major === null) return false
   return KNOWN_MAJORS.includes(major)
+}
+
+// ---------------------------------------------------------------------------
+// The installation of PostgreSQL
+// ---------------------------------------------------------------------------
+
+/** The package manager of the machine, and the packages of PostgreSQL. */
+interface Installer {
+  /** The name of the manager, for the messages of the machine. */
+  readonly name: string
+  /** The command that installs the packages. */
+  readonly command: string[]
+  /** The packages of PostgreSQL for that manager. */
+  readonly packages: string[]
+  /** The command that reads the index of the packages again. */
+  readonly update: string[]
+}
+
+/**
+ * The installer of the packages of PostgreSQL of the machine.
+ *
+ * The machine is Debian or Ubuntu, Fedora, or macOS: the packages of
+ * PostgreSQL are named differently, and the manager of the machine
+ * knows how to install them.
+ */
+export function installer(): Installer | undefined {
+  if (existsSync('/usr/bin/apt-get')) {
+    return {
+      name: 'apt',
+      command: ['apt-get', 'install', '-y', '-q'],
+      packages: ['postgresql'],
+      update: ['apt-get', 'update', '-q'],
+    }
+  }
+  if (existsSync('/usr/bin/dnf')) {
+    return {
+      name: 'dnf',
+      command: ['dnf', 'install', '-y'],
+      packages: ['postgresql-server', 'postgresql-contrib'],
+      update: ['dnf', 'makecache'],
+    }
+  }
+  if (existsSync('/opt/homebrew/bin/brew') || existsSync('/usr/local/bin/brew')) {
+    return {
+      name: 'brew',
+      command: ['brew', 'install'],
+      packages: ['postgresql@18'],
+      update: ['brew', 'update'],
+    }
+  }
+  return undefined
+}
+
+/**
+ * Tells whether the machine can run a command with the rights of the
+ * root, without asking for a password.
+ *
+ * The machine never asks for a password: a runner that waits for a
+ * password that nobody types is a runner that hangs.
+ */
+export function canElevate(): boolean {
+  const result = spawnSync(['sudo', '-n', 'true'], { stdout: 'ignore', stderr: 'ignore' })
+  return exitCodeOf(result) === 0
+}
+
+/**
+ * Runs a command of the machine and waits for it.
+ *
+ * The lines of the command are given to the caller, so the machine
+ * says what it is doing.
+ */
+export async function run(command: string[], onLine: (line: string) => void): Promise<number> {
+  const child = spawn(command, {
+    stdout: 'pipe',
+    stderr: 'pipe',
+    env: { ...process.env, DEBIAN_FRONTEND: 'noninteractive' },
+  })
+  const collect = (stream: ReadableStream<Uint8Array> | undefined): void => {
+    if (!stream) return
+    void (async () => {
+      const decoder = new TextDecoder()
+      for await (const chunk of stream as ByteStream) {
+        for (const line of decoder.decode(chunk).split('\n')) {
+          if (line.trim().length === 0) continue
+          onLine(line)
+        }
+      }
+    })()
+  }
+  collect(child.stdout as ReadableStream<Uint8Array>)
+  collect(child.stderr as ReadableStream<Uint8Array>)
+  return await child.exited
+}
+
+/**
+ * Installs PostgreSQL on the machine.
+ *
+ * The install is the one of the package manager of the machine, and it
+ * needs the rights of the root: the machine only runs it when it can
+ * do it without asking for a password. The machine says what it
+ * installs.
+ *
+ * An install that fails because the index of the packages of the
+ * machine is older than its packages is tried again with a fresh
+ * index.
+ */
+export async function install(onLine: (line: string) => void): Promise<Binaries | undefined> {
+  const installer_ = installer()
+  if (!installer_) return undefined
+  const asRoot = canElevate() ? ['sudo', '-n'] : []
+  const command = [...asRoot, ...installer_.command, ...installer_.packages]
+  onLine(`$ ${command.join(' ')}`)
+  if ((await run(command, onLine)) !== 0) {
+    if (asRoot.length === 0) return find()
+    // The index of the packages of the machine may be older than the
+    // packages of the machine: the index is read again, and the
+    // install is tried once more.
+    onLine('the index of the packages of the machine is read again')
+    const update = [...asRoot, ...installer_.update]
+    onLine(`$ ${update.join(' ')}`)
+    await run(update, onLine)
+    onLine(`$ ${command.join(' ')}`)
+    if ((await run(command, onLine)) !== 0) return undefined
+  }
+  return find()
 }
