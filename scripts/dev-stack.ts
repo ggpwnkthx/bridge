@@ -46,6 +46,7 @@ import {
   signal,
   tree,
 } from './dev-processes'
+import { exitCodeOf } from './spawn'
 import { drift, type Migrations, readMigrations } from './dev-schema'
 
 // ---------------------------------------------------------------------------
@@ -251,7 +252,10 @@ async function stopPreviousDatabase(): Promise<void> {
     encoding: 'utf8',
   })
   const report = `${result.stdout}${result.stderr}`
-  if (result.status !== 0 && !/is server running/i.test(report)) {
+  // The runtime of Bun names the code of the exit `exitCode` and the
+  // types of the runtime name it `status`: a check on `status` is a
+  // check on nothing.
+  if (exitCodeOf(result) !== 0 && !/is server running/i.test(report)) {
     step(`the database of the previous run is left as it is: ${result.stderr.trim()}`)
   }
 }

@@ -31,6 +31,7 @@ import {
   writeFileSync,
 } from 'node:fs'
 import { join } from 'node:path'
+import { exitCodeOf } from './spawn'
 
 // ---------------------------------------------------------------------------
 // The processes of the machine
@@ -51,7 +52,7 @@ interface ProcessRow {
 /** The table of the processes of the machine. */
 function psRows(): ProcessRow[] {
   const result = spawnSync('ps', ['-ww', '-eo', 'pid=,ppid=,stat=,command='], { encoding: 'utf8' })
-  if (result.status !== 0 || typeof result.stdout !== 'string') return []
+  if (exitCodeOf(result) !== 0 || typeof result.stdout !== 'string') return []
   const rows: ProcessRow[] = []
   for (const line of result.stdout.split('\n')) {
     const trimmed = line.trim()
@@ -144,7 +145,7 @@ export function cwdOf(pid: number): string | undefined {
   const result = spawnSync('lsof', ['-a', '-p', String(pid), '-d', 'cwd', '-Fn'], {
     encoding: 'utf8',
   })
-  if (result.status !== 0 || typeof result.stdout !== 'string') return undefined
+  if (exitCodeOf(result) !== 0 || typeof result.stdout !== 'string') return undefined
   for (const line of result.stdout.split('\n')) {
     if (line.startsWith('n')) return line.slice(1)
   }
