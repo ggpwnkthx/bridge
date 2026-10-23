@@ -165,6 +165,44 @@ beforeAll(async () => {
           { status: 401, headers: { 'x-request-id': 'the-request-of-the-gateway' } }
         )
       }
+      if (url.pathname === `/ws/${WORKSPACE}/v1/items/articles/r1/versions`) {
+        return Response.json({
+          data: [
+            {
+              version: 1,
+              operation: 'update',
+              changedFields: ['title'],
+              supersededAt: '2026-10-23T10:00:00.000Z',
+              supersededBy: 'the-principal',
+            },
+          ],
+        })
+      }
+      if (url.pathname === `/ws/${WORKSPACE}/v1/items/articles/r1/versions/1`) {
+        return Response.json({ data: { id: 'r1', version: 1, title: 'Hello' } })
+      }
+      if (url.pathname === `/ws/${WORKSPACE}/v1/items/articles/r1/rollback`) {
+        if (request.method !== 'POST') {
+          return Response.json(
+            { error: { code: 'INVALID_REQUEST', message: 'the method is not allowed' } },
+            { status: 405 }
+          )
+        }
+        if (!request.headers.get('if-match')) {
+          return Response.json(
+            { error: { code: 'INVALID_REQUEST', message: 'the validator is required' } },
+            { status: 400 }
+          )
+        }
+        const body = (await request.json()) as { version?: number }
+        if (typeof body.version !== 'number') {
+          return Response.json(
+            { error: { code: 'INVALID_REQUEST', message: 'the version is required' } },
+            { status: 400 }
+          )
+        }
+        return Response.json({ data: { id: 'r1', version: 3, title: 'Hello' } })
+      }
       return Response.json(
         { error: { code: 'NOT_FOUND', message: 'this path does not exist' } },
         { status: 404 }
@@ -360,6 +398,75 @@ describe('the studio', () => {
     expect(answer.status).toBe(404)
     const body = (await answer.json()) as { error: { code: string } }
     expect(body.error.code).toBe('NOT_FOUND')
+  })
+
+  test('the studio reads the history of a record', async () => {
+    const { app } = studio()
+    const session = await login(app)
+    const answer = await app.request(`/w/${WORKSPACE}/api/items/articles/r1/versions`, {
+      headers: { cookie: `bridge_session=${session}` },
+    })
+    expect(answer.status).toBe(200)
+    const body = (await answer.json()) as {
+      data: { version: number; operation: string; changedFields: string[] }[]
+    }
+    expect(body.data[0]?.version).toBe(1)
+    expect(body.data[0]?.operation).toBe('update')
+    expect(body.data[0]?.changedFields).toEqual(['title'])
+  })
+
+  test('the studio reads one version of a record', async () => {
+    const { app } = studio()
+    const session = await login(app)
+    const answer = await app.request(`/w/${WORKSPACE}/api/items/articles/r1/versions/1`, {
+      headers: { cookie: `bridge_session=${session}` },
+    })
+    expect(answer.status).toBe(200)
+    const body = (await answer.json()) as { data: { id: string; version: number } }
+    expect(body.data.version).toBe(1)
+  })
+
+  test('the studio rolls a record back to one of its versions', async () => {
+    const { app } = studio()
+    const session = await login(app)
+    const info = await app.request(`/w/${WORKSPACE}/api/session`, {
+      headers: { cookie: `bridge_session=${session}` },
+    })
+    const body = (await info.json()) as { data: { csrfToken: string } }
+    const answer = await app.request(`/w/${WORKSPACE}/api/items/articles/r1/rollback`, {
+      method: 'POST',
+      headers: {
+        cookie: `bridge_session=${session}`,
+        'content-type': 'application/json',
+        'x-bridge-csrf': body.data.csrfToken,
+        'if-match': '"v3"',
+      },
+      body: JSON.stringify({ version: 1 }),
+    })
+    expect(answer.status).toBe(200)
+    const rolled = (await answer.json()) as { data: { version: number } }
+    expect(rolled.data.version).toBe(3)
+  })
+
+  test('a rollback needs the validator of the record', async () => {
+    const { app } = studio()
+    const session = await login(app)
+    const info = await app.request(`/w/${WORKSPACE}/api/session`, {
+      headers: { cookie: `bridge_session=${session}` },
+    })
+    const body = (await info.json()) as { data: { csrfToken: string } }
+    const answer = await app.request(`/w/${WORKSPACE}/api/items/articles/r1/rollback`, {
+      method: 'POST',
+      headers: {
+        cookie: `bridge_session=${session}`,
+        'content-type': 'application/json',
+        'x-bridge-csrf': body.data.csrfToken,
+      },
+      body: JSON.stringify({ version: 1 }),
+    })
+    expect(answer.status).toBe(400)
+    const refusal = (await answer.json()) as { error: { code: string } }
+    expect(refusal.error.code).toBe('INVALID_REQUEST')
   })
 
   test('a logout deletes the session', async () => {

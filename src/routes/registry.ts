@@ -26,6 +26,9 @@ import * as schema from './w/[workspaceId]/api/schema'
 import * as schemaCollection from './w/[workspaceId]/api/schema/[collection]'
 import * as items from './w/[workspaceId]/api/items/[collection]/index'
 import * as record from './w/[workspaceId]/api/items/[collection]/[id]'
+import * as versions from './w/[workspaceId]/api/items/[collection]/[id]/versions'
+import * as version from './w/[workspaceId]/api/items/[collection]/[id]/versions/[version]'
+import * as rollback from './w/[workspaceId]/api/items/[collection]/[id]/rollback'
 import * as aggregate from './w/[workspaceId]/api/aggregate/[collection]'
 import * as audit from './w/[workspaceId]/api/audit'
 import * as renderer from './_renderer'
@@ -53,6 +56,9 @@ export const ROUTES = {
   '/src/routes/w/[workspaceId]/api/schema/[collection].ts': schemaCollection,
   '/src/routes/w/[workspaceId]/api/items/[collection]/index.ts': items,
   '/src/routes/w/[workspaceId]/api/items/[collection]/[id].ts': record,
+  '/src/routes/w/[workspaceId]/api/items/[collection]/[id]/versions.ts': versions,
+  '/src/routes/w/[workspaceId]/api/items/[collection]/[id]/versions/[version].ts': version,
+  '/src/routes/w/[workspaceId]/api/items/[collection]/[id]/rollback.ts': rollback,
   '/src/routes/w/[workspaceId]/api/aggregate/[collection].ts': aggregate,
   '/src/routes/w/[workspaceId]/api/audit.ts': audit,
 }

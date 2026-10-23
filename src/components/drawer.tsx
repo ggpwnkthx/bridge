@@ -9,7 +9,8 @@
 import type { JSX } from 'preact'
 import { useEffect, useMemo, useRef, useState } from 'preact/hooks'
 import { cellValue, columnLabel, humanizeName, identityField } from '../client/format'
-import type { CollectionMetadata, FieldMetadata, Row } from '../client/types'
+import { ApiError } from '../client/api'
+import type { CollectionMetadata, FieldMetadata, Row, VersionEntry } from '../client/types'
 import { fieldValue } from '../client/values'
 import { useStudio } from './context'
 import { Notice } from './notice'
@@ -43,6 +44,8 @@ export function Drawer(props: {
   const [pending, setPending] = useState(false)
   const [deleteArmed, setDeleteArmed] = useState(false)
   const [discardArmed, setDiscardArmed] = useState(false)
+  const [versions, setVersions] = useState<VersionEntry[]>([])
+  const [historyArmed, setHistoryArmed] = useState<number | null>(null)
   const title = useRef<HTMLHeadingElement | null>(null)
   const root = useRef<HTMLDivElement | null>(null)
   // The key of a creation is bound to the form of the record: a
@@ -50,7 +53,9 @@ export function Drawer(props: {
   // with two records.
   const [idempotencyKey] = useState(() => crypto.randomUUID())
 
-  // The record is read when the drawer opens.
+  // The record is read when the drawer opens, and its history with it:
+  // the drawer is complete when it appears, and nothing moves under the
+  // hands of the caller while it writes.
   useEffect(() => {
     let live = true
     setLoading(true)
@@ -59,18 +64,31 @@ export function Drawer(props: {
       setRow({})
       setEtag('')
       setValues(initialValues(collection, {}))
+      setVersions([])
       setLoading(false)
       return
     }
-    studio.api
-      .get<{ data: Row; etag: string }>(
-        `/items/${encodeURIComponent(collection.key)}/${encodeURIComponent(id)}`
+    const record = studio.api.get<{ data: Row; etag: string }>(
+      `/items/${encodeURIComponent(collection.key)}/${encodeURIComponent(id)}`
+    )
+    // A collection that keeps no history answers `404`: it is not a
+    // failure, and the drawer shows the record and nothing else.
+    const history = studio.api
+      .get<{ data: VersionEntry[] }>(
+        `/items/${encodeURIComponent(collection.key)}/${encodeURIComponent(id)}/versions`
       )
-      .then((answer) => {
+      .then((answer) => answer.data)
+      .catch((error: unknown) => {
+        if (error instanceof ApiError && error.code === 'NOT_FOUND') return []
+        throw error
+      })
+    Promise.all([record, history])
+      .then(([answer, versions]) => {
         if (!live) return
         setRow(answer.data)
         setEtag(answer.etag)
         setValues(initialValues(collection, answer.data))
+        setVersions(versions)
         setLoading(false)
       })
       .catch((error: unknown) => {
@@ -178,6 +196,34 @@ export function Drawer(props: {
     }
   }
 
+  /**
+   * Rolls the record back to one of its versions.
+   *
+   * The rollback is a write like any other: it carries the validator
+   * of the record, and the record holds the version that follows the
+   * one it had.
+   */
+  const restore = async (version: number): Promise<void> => {
+    if (pending || !id) return
+    setPending(true)
+    setHistoryArmed(null)
+    try {
+      await studio.api.send(
+        'POST',
+        `/items/${encodeURIComponent(collection.key)}/${encodeURIComponent(id)}/rollback`,
+        { version },
+        { etag }
+      )
+      studio.toast(`The record was restored to the version ${version}.`, 'ok')
+      setVersions([])
+      props.onChanged()
+    } catch (error) {
+      setNotice(error)
+    } finally {
+      setPending(false)
+    }
+  }
+
   const identity = identityField(
     collection.readableFields.length > 0 ? collection.readableFields : ['id']
   )
@@ -245,6 +291,17 @@ export function Drawer(props: {
           <Notice error={notice} />
         </div>
       ) : null}
+      {versions.length > 0 ? (
+        <History
+          collection={collection}
+          versions={versions}
+          pending={pending}
+          armed={historyArmed}
+          restore={(version) => void restore(version)}
+          arm={(version) => setHistoryArmed(version)}
+          disarm={() => setHistoryArmed(null)}
+        />
+      ) : null}
       <Actions
         collection={collection}
         id={id}
@@ -271,6 +328,88 @@ export function Drawer(props: {
       />
     </div>
   )
+}
+
+/**
+ * The history of a record.
+ *
+ * The list holds the versions that are not the current one: the current
+ * version of a record is the record itself. Every version says what
+ * changed it and when, and it can be restored.
+ */
+function History(props: {
+  collection: CollectionMetadata
+  versions: VersionEntry[]
+  pending: boolean
+  /** The version whose restoration waits for a second answer. */
+  armed: number | null
+  restore: (version: number) => void
+  arm: (version: number) => void
+  disarm: () => void
+}): JSX.Element {
+  const { collection, versions } = props
+  return (
+    <section class="history" aria-labelledby="history-title">
+      <h3 id="history-title">History</h3>
+      <ol class="history-list">
+        {versions.map((entry) => (
+          <li key={entry.version} class="history-entry">
+            <div class="history-line">
+              <span class="history-version">Version {entry.version}</span>
+              <span class="history-when">{formatInstant(entry.supersededAt)}</span>
+            </div>
+            <div class="history-what">{describeChange(collection, entry)}</div>
+            {props.armed === entry.version ? (
+              <div class="drawer-actions">
+                <span class="drawer-question">
+                  Restore the version {entry.version} of the record?
+                </span>
+                <button
+                  class="danger"
+                  type="button"
+                  data-action="restore"
+                  disabled={props.pending}
+                  onClick={() => props.restore(entry.version)}
+                >
+                  Restore
+                </button>
+                <button class="ghost" type="button" onClick={props.disarm}>
+                  Keep it
+                </button>
+              </div>
+            ) : (
+              <div class="drawer-actions">
+                <button
+                  class="ghost"
+                  type="button"
+                  data-action="history"
+                  disabled={props.pending}
+                  onClick={() => props.arm(entry.version)}
+                >
+                  Restore this version
+                </button>
+              </div>
+            )}
+          </li>
+        ))}
+      </ol>
+    </section>
+  )
+}
+
+/** What a version says about the change that superseded it. */
+function describeChange(collection: CollectionMetadata, entry: VersionEntry): string {
+  if (entry.operation === 'delete') return 'The record was deleted.'
+  if (entry.changedFields.length === 0) return 'The record was changed.'
+  const names = entry.changedFields.map((name) => columnLabel(collection, name))
+  return `The record was changed: ${names.join(', ')}.`
+}
+
+/** An instant of the history, in the words of the studio. */
+function formatInstant(instant: string): string {
+  const date = new Date(instant)
+  if (Number.isNaN(date.getTime())) return instant
+  return date.toISOString().replace('T', ' ').slice(0, 16)
 }
 
 /** The actions of the drawer: the change of the record, or the removal of it. */

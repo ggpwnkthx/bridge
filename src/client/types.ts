@@ -55,6 +55,15 @@ export interface SessionInfo {
 /** A row of a collection. */
 export type Row = Record<string, unknown>
 
+/** One version of a record, as the backend answers it. */
+export interface VersionEntry {
+  version: number
+  operation: 'update' | 'delete'
+  changedFields: string[]
+  supersededAt: string
+  supersededBy: string
+}
+
 /** The page of a collection. */
 export interface Page {
   data: Row[]

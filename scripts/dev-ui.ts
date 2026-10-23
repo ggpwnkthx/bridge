@@ -152,6 +152,20 @@ async function main(): Promise<void> {
     if (message.type() === 'error') failures.push(`the console of the browser: ${message.text()}`)
   })
   check('the studio answers after the login', page.url().includes(`/w/${WORKSPACE}`), page.url())
+
+  // The test needs a record: it makes one when the collection is empty,
+  // so the test does not depend on the state of the database.
+  step('the record of the test')
+  if ((await page.$$eval('.row-open', (buttons) => buttons.length)) === 0) {
+    const create = page.locator('button', { hasText: 'New record' })
+    if ((await create.count()) > 0) {
+      await create.first().click()
+      await page.waitForSelector('.drawer .field', { timeout: 10000 })
+      await page.fill('.drawer input', 'The record of the test')
+      await page.click('[data-action="create"]')
+      await page.waitForTimeout(2000)
+    }
+  }
   await page.waitForSelector('.row-open', { timeout: 15000 })
 
   step('the rows of the collection')
@@ -243,6 +257,21 @@ async function main(): Promise<void> {
     await page.waitForTimeout(2000)
     const answer = await read()
     check('the body of the record keeps its lines', answer.body === lines, String(answer.body))
+
+    step('the history of a record')
+    await page.click('.row-open')
+    await page.waitForSelector('.drawer .field', { timeout: 10000 })
+    const versions = await page.$$eval('.drawer .history-version', (nodes) =>
+      nodes.map((node) => node.textContent ?? '')
+    )
+    check('the drawer shows the versions of the record', versions.length > 0, versions.join(', '))
+    check(
+      'a version of the record names itself',
+      versions.every((version) => /Version \d+/.test(version)),
+      versions.join(', ')
+    )
+    await page.click('.drawer [data-action="close"]')
+    await page.waitForSelector('.drawer', { state: 'detached', timeout: 10000 })
 
     step('the clearing of a field')
     await page.click('.row-open')

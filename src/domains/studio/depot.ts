@@ -69,6 +69,15 @@ export interface SchemaMetadata {
 /** A row of a collection. */
 export type Row = Record<string, unknown> & { id: string; version: number }
 
+/** One version of a record, as the backend answers it. */
+export interface VersionEntry {
+  readonly version: number
+  readonly operation: 'update' | 'delete'
+  readonly changedFields: readonly string[]
+  readonly supersededAt: string
+  readonly supersededBy: string
+}
+
 /** A page of a collection. */
 export interface Page {
   readonly data: readonly Row[]
@@ -354,6 +363,52 @@ export class DepotClient {
       method: 'DELETE',
       headers: { 'if-match': etag },
     })
+  }
+
+  /**
+   * The history of the versions of a row.
+   *
+   * The list holds the versions that are not the current one: the
+   * current version of a record is the record itself. A collection that
+   * keeps no history answers `404`.
+   */
+  async versions(key: string, id: string): Promise<readonly VersionEntry[]> {
+    const answer = await this.#call<{ data: VersionEntry[] }>(
+      `/items/${encodeURIComponent(key)}/${id}/versions`
+    )
+    return answer.body.data
+  }
+
+  /** One version of a row, and the validator of it. */
+  async version(key: string, id: string, version: number): Promise<{ row: Row; etag: string }> {
+    const answer = await this.#call<{ data: Row }>(
+      `/items/${encodeURIComponent(key)}/${id}/versions/${version}`
+    )
+    return { row: answer.body.data, etag: answer.headers.get('etag') ?? '' }
+  }
+
+  /**
+   * Rolls a row back to one of its versions.
+   *
+   * The rollback is a write like any other: the version of the record
+   * never moves back, the record holds the version that follows the one
+   * it had.
+   */
+  async rollback(
+    key: string,
+    id: string,
+    version: number,
+    etag: string
+  ): Promise<{ row: Row; etag: string }> {
+    const answer = await this.#call<{ data: Row }>(
+      `/items/${encodeURIComponent(key)}/${id}/rollback`,
+      {
+        method: 'POST',
+        body: { version },
+        headers: { 'if-match': etag },
+      }
+    )
+    return { row: answer.body.data, etag: answer.headers.get('etag') ?? '' }
   }
 
   /** The groups of an aggregate. */
