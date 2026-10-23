@@ -63,14 +63,10 @@ const EnvironmentSchema = z.object({
    *
    * It is the key of the signature `v5` of the identity of a request: the
    * studio verifies the identity of the caller with it and it cannot mint
-   * one.
+   * one. The symmetric format of the earlier releases (`v4`) is not
+   * understood: the gateway removed it in its `1.0` release.
    */
   BRIDGE_GATEWAY_IDENTITY_PUBLIC_KEY: z.string().min(1).optional(),
-  /**
-   * The derived key of the signature `v4` of the identity of a request,
-   * in base64.
-   */
-  BRIDGE_GATEWAY_IDENTITY_KEY: z.string().min(1).optional(),
   /**
    * Whether the studio refuses a request that did not go through the
    * gateway.
@@ -123,7 +119,7 @@ export interface BridgeConfig {
   readonly secureCookies: boolean
   /** The key with which the identity of the gateway is verified. */
   readonly gatewayIdentityKey?: {
-    readonly version: 'v4' | 'v5'
+    readonly version: 'v5'
     readonly key: string
   }
   readonly requireGatewayIdentity: boolean
@@ -184,7 +180,7 @@ export function readConfig(env: Record<string, string | undefined>): BridgeConfi
   const gatewayIdentityKey = identityKeyOf(value)
   if (production && !gatewayIdentityKey) {
     details.push(
-      'BRIDGE_GATEWAY_IDENTITY_PUBLIC_KEY (or BRIDGE_GATEWAY_IDENTITY_KEY) is required in a production environment: the studio verifies the identity of the gateway'
+      'BRIDGE_GATEWAY_IDENTITY_PUBLIC_KEY is required in a production environment: the studio verifies the identity of the gateway'
     )
   }
 
@@ -230,13 +226,9 @@ export function readConfig(env: Record<string, string | undefined>): BridgeConfi
  */
 function identityKeyOf(value: {
   BRIDGE_GATEWAY_IDENTITY_PUBLIC_KEY?: string
-  BRIDGE_GATEWAY_IDENTITY_KEY?: string
 }): BridgeConfig['gatewayIdentityKey'] {
   if (value.BRIDGE_GATEWAY_IDENTITY_PUBLIC_KEY) {
     return { version: 'v5', key: value.BRIDGE_GATEWAY_IDENTITY_PUBLIC_KEY }
-  }
-  if (value.BRIDGE_GATEWAY_IDENTITY_KEY) {
-    return { version: 'v4', key: value.BRIDGE_GATEWAY_IDENTITY_KEY }
   }
   return undefined
 }

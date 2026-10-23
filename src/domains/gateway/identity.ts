@@ -11,6 +11,15 @@
  * headers say. The module is standalone: it implements the contract of
  * the gateway with a standard library and it imports nothing of the
  * platform.
+ *
+ * The format of the signature is the `v5` of the gateway: a JWS signed
+ * with `ES256` and the private key of the deployment, and the upstream
+ * is given the public one. The symmetric format of the earlier releases
+ * (`v4`) is **not** understood: the gateway removed it in its `1.0`
+ * release, because its key was shared with the upstreams and an upstream
+ * that verified an identity could mint one. A studio that accepts it
+ * would accept an identity that anybody with the derived key could
+ * write.
  */
 
 import { compactVerify, importSPKI } from 'jose'
@@ -30,8 +39,8 @@ export const ROLES_HEADER = 'x-shuttle-roles'
 /** The header the workspace is written to. */
 export const WORKSPACE_HEADER = 'x-shuttle-workspace'
 
-/** The versions of the signature the studio understands. */
-export const SUPPORTED_VERSIONS = ['v5', 'v4'] as const
+/** The version of the signature the studio understands. */
+export const SUPPORTED_VERSION = 'v5'
 
 /** The identity of a caller, as the headers carry it. */
 export interface GatewayIdentity {
@@ -102,12 +111,13 @@ export function identityOf(headers: Headers): GatewayIdentity {
 /**
  * The key the signature is verified with.
  *
- * The asymmetric key is a PEM of a public key and the symmetric one is the
- * derived key of the deployment, in base64.
+ * The key is the public key of the deployment, in PEM: the studio
+ * verifies an identity of the gateway and it cannot mint one.
  */
-export type VerificationKey =
-  | { readonly version: 'v5'; readonly publicKeyPem: string }
-  | { readonly version: 'v4'; readonly derivedKeyBase64: string }
+export interface VerificationKey {
+  readonly version: 'v5'
+  readonly publicKeyPem: string
+}
 
 /**
  * Verifies the identity of a request.
@@ -127,7 +137,7 @@ export async function verifyGatewayIdentity(
   const separator = signature.indexOf('=')
   if (separator === -1) return { ok: false, reason: 'the signature is malformed' }
   const version = signature.slice(0, separator)
-  if (!(SUPPORTED_VERSIONS as readonly string[]).includes(version)) {
+  if (version !== SUPPORTED_VERSION) {
     return { ok: false, reason: `the version "${version}" of the signature is not known` }
   }
 
@@ -150,14 +160,8 @@ export async function verifyGatewayIdentity(
   const compact = `${protectedHeader}.${Buffer.from(rebuilt, 'utf8').toString('base64url')}.${detachedSignature}`
 
   try {
-    if (key.version === 'v5') {
-      const publicKey = await importSPKI(key.publicKeyPem, 'ES256')
-      await compactVerify(compact, publicKey, { algorithms: ['ES256'] })
-    } else {
-      const secret = Buffer.from(key.derivedKeyBase64, 'base64')
-      if (secret.length === 0) return { ok: false, reason: 'the key of the gateway is empty' }
-      await compactVerify(compact, secret, { algorithms: ['HS256'] })
-    }
+    const publicKey = await importSPKI(key.publicKeyPem, 'ES256')
+    await compactVerify(compact, publicKey, { algorithms: ['ES256'] })
   } catch {
     return { ok: false, reason: 'the signature does not verify' }
   }

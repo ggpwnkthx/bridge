@@ -1,10 +1,14 @@
 /**
  * The tests of the verification of the identity of the gateway.
+ *
+ * The studio understands the format `v5` of the signature of the
+ * gateway: a detached JWS signed with `ES256` and the private key of
+ * the deployment. The symmetric format of the earlier releases (`v4`)
+ * is not understood: the gateway removed it in its `1.0` release.
  */
 
 import { describe, expect, test } from 'bun:test'
 import { CompactSign, base64url, exportSPKI, generateKeyPair, type KeyInput } from 'jose'
-import { createHmac } from 'node:crypto'
 import {
   canonicalPayload,
   verifyGatewayIdentity,
@@ -50,76 +54,66 @@ async function sign(
     version
   )
   const jws = await new CompactSign(new TextEncoder().encode(payload))
-    .setProtectedHeader({ alg: version === 'v5' ? 'ES256' : 'HS256', typ: 'shuttle-identity' })
+    .setProtectedHeader({ alg: 'ES256', typ: 'shuttle-identity' })
     .sign(key)
   const [protectedHeader, , signature] = jws.split('.')
   return `${version}=${protectedHeader}..${signature}`
 }
 
-describe('the identity of the gateway', () => {
-  test('it verifies the signature of the symmetric format', async () => {
-    const secret = 'the-secret-of-the-deployment'
-    const derived = createHmac('sha256', secret).update('shuttle-identity-signature-v1').digest()
-    const key: VerificationKey = { version: 'v4', derivedKeyBase64: derived.toString('base64') }
-    const values = {
+/** The key of the deployment, and the headers of an identity. */
+async function deployment(): Promise<{
+  key: VerificationKey
+  values: Record<string, string>
+  pair: Awaited<ReturnType<typeof generateKeyPair>>
+}> {
+  const pair = await generateKeyPair('ES256')
+  const pem = await exportSPKI(pair.publicKey)
+  return {
+    key: { version: 'v5', publicKeyPem: pem },
+    values: {
       'x-shuttle-user': identity.subject,
       'x-shuttle-email': identity.email,
       'x-shuttle-roles': identity.roles.join(','),
       'x-shuttle-workspace': identity.workspaceId ?? '',
-    }
+    },
+    pair,
+  }
+}
+
+describe('the identity of the gateway', () => {
+  test('it verifies the signature of the asymmetric format', async () => {
+    const { key, values, pair } = await deployment()
     const headers = headersOf(values)
-    headers.set('x-shuttle-signature', await sign('v4', derived, values, request))
+    headers.set('x-shuttle-signature', await sign('v5', pair.privateKey, values, request))
     const result = await verifyGatewayIdentity(request, headers, key)
     expect(result.ok).toBe(true)
     if (result.ok) {
       expect(result.identity.subject).toBe(identity.subject)
       expect(result.identity.roles).toEqual(['reader', 'editor'])
-      expect(result.version).toBe('v4')
+      expect(result.version).toBe('v5')
     }
-  })
-
-  test('it verifies the signature of the asymmetric format', async () => {
-    const pair = await generateKeyPair('ES256')
-    const pem = await exportSPKI(pair.publicKey)
-    const key: VerificationKey = { version: 'v5', publicKeyPem: pem }
-    const values = {
-      'x-shuttle-user': identity.subject,
-      'x-shuttle-email': identity.email,
-      'x-shuttle-roles': identity.roles.join(','),
-      'x-shuttle-workspace': identity.workspaceId ?? '',
-    }
-    const headers = headersOf(values)
-    headers.set('x-shuttle-signature', await sign('v5', pair.privateKey, values, request))
-    const result = await verifyGatewayIdentity(request, headers, key)
-    expect(result.ok).toBe(true)
   })
 
   test('it refuses a signature that belongs to another request', async () => {
-    const secret = 'the-secret-of-the-deployment'
-    const derived = createHmac('sha256', secret).update('shuttle-identity-signature-v1').digest()
-    const key: VerificationKey = { version: 'v4', derivedKeyBase64: derived.toString('base64') }
-    const values = {
-      'x-shuttle-user': identity.subject,
-      'x-shuttle-roles': identity.roles.join(','),
-    }
+    const { key, values, pair } = await deployment()
     const headers = headersOf(values)
     headers.set(
       'x-shuttle-signature',
-      await sign('v4', derived, values, { ...request, path: '/w/other/api/items/articles' })
+      await sign('v5', pair.privateKey, values, { ...request, path: '/w/other/api/items/articles' })
     )
     const result = await verifyGatewayIdentity(request, headers, key)
     expect(result.ok).toBe(false)
   })
 
   test('it refuses a request that carries no signature', async () => {
-    const key: VerificationKey = { version: 'v4', derivedKeyBase64: 'AAAA' }
+    const { key } = await deployment()
     const result = await verifyGatewayIdentity(request, headersOf({}), key)
     expect(result.ok).toBe(false)
     if (!result.ok) expect(result.reason).toContain('no signature')
   })
 
   test('it refuses a version it does not know', async () => {
-    const key: VerificationKey = { version: 'v4', derivedKeyBase64: 'AAAA' }
+    const { key } = await deployment()
     const headers = headersOf({
       'x-shuttle-user': identity.subject,
       'x-shuttle-signature': `v9=${base64url.encode('{}')}.x`,
@@ -127,5 +121,17 @@ describe('the identity of the gateway', () => {
     const result = await verifyGatewayIdentity(request, headers, key)
     expect(result.ok).toBe(false)
     if (!result.ok) expect(result.reason).toContain('v9')
+  })
+
+  test('it refuses the symmetric format of the earlier releases', async () => {
+    const { key, values, pair } = await deployment()
+    const headers = headersOf(values)
+    // The gateway signed `v5` only, from its `1.0` release on: the
+    // studio refuses a signature of the format `v4` like any other
+    // signature of a version it does not know.
+    headers.set('x-shuttle-signature', await sign('v4', pair.privateKey, values, request))
+    const result = await verifyGatewayIdentity(request, headers, key)
+    expect(result.ok).toBe(false)
+    if (!result.ok) expect(result.reason).toContain('v4')
   })
 })

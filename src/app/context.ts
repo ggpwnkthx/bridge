@@ -151,9 +151,7 @@ async function readGateway(c: Context<AppEnv>): Promise<GatewayIdentity | undefi
       host: c.req.header('x-forwarded-host') ?? '',
     },
     c.req.raw.headers,
-    key.version === 'v5'
-      ? { version: 'v5', publicKeyPem: key.key }
-      : { version: 'v4', derivedKeyBase64: key.key }
+    { version: 'v5', publicKeyPem: key.key }
   )
   if (!result.ok) {
     throw new StudioError('INVALID_GATEWAY_IDENTITY', result.reason, { status: 403 })
