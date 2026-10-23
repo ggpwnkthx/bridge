@@ -23,7 +23,7 @@ jobs:
         with:
           # The version of the runtime is the one of the image of the
           # studio and the one of the `engines` of the package.
-          bun-version: latest
+          bun-version: 1.4.3
       - run: bun install --frozen-lockfile
       - run: bun run typecheck
       - run: bun run lint
@@ -45,7 +45,7 @@ jobs:
           path: bridge
       - uses: oven-sh/setup-bun@v2
         with:
-          bun-version: latest
+          bun-version: 1.4.3
       - name: the installation
         working-directory: bridge
         run: bun install --frozen-lockfile
@@ -82,7 +82,7 @@ jobs:
           path: shuttle
       - uses: oven-sh/setup-bun@v2
         with:
-          bun-version: latest
+          bun-version: 1.4.3
       - name: the database of the development machine
         run: sudo apt-get update && sudo apt-get install -y postgresql-16
       - name: the dependencies
