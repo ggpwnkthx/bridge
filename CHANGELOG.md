@@ -57,6 +57,17 @@ the versions follow [semantic versioning](https://semver.org).
 
 ### Changed
 
+- The baseline of the compatibility is the **newest released platform**:
+  the gateway `1.3.0`, the broker `1.0.1` and the backend `0.3.1`. The
+  broker `1.0.1` and the backend `0.3.1` are patch releases: they
+  change no contract, and the broker pins the gateway `1.3.0` itself,
+  so the baseline is the pair that the platform publishes. The studio
+  reads the same contracts as before — the broker still speaks the
+  authorization code flow with PKCE, the gateway still signs the
+  identity of a caller in the format `v5`, and the backend still
+  answers the envelope of the versions of a record — so no line of the
+  studio changed. The harness of the baseline proves it: the studio
+  speaks the contract of the baseline.
 - The studio understands the **format `v5`** of the signature of the
   gateway and nothing else. The symmetric format `v4` is removed: the
   gateway removed it in its `1.0` release, because its key was shared

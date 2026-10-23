@@ -3,15 +3,15 @@
   "repositories": {
     "shuttle": {
       "url": "https://github.com/ggpwnkthx/shuttle.git",
-      "commit": "76b3ff8c34019f1cdb32d7e8c135e785ef3da725"
+      "commit": "0e09a420f8d5f7f3e2eea63512f808ce4ae215e0"
     },
     "hub": {
       "url": "https://github.com/ggpwnkthx/hub.git",
-      "commit": "ffb0bd56c86a0064c212c5d7358e7cff11640394"
+      "commit": "ef69e2fdd683572a68585c9234498e1cec3850f9"
     },
     "depot": {
       "url": "https://github.com/ggpwnkthx/depot.git",
-      "commit": "f39a0a7fa46bbec419e1a6da428c75d3fc7392cc"
+      "commit": "4ba1eed62942390296a17ec4b029803e48ebad6e"
     }
   }
 }
