@@ -39,6 +39,11 @@ the versions follow [semantic versioning](https://semver.org).
 
 ### Fixed
 
+- The runner of the development machine **never kills its own shell**:
+  a run started by `bun run scripts/dev-stack.ts` carries the command
+  of the run in the command line of its parent, and the runner took
+  that parent for a run of the machine that came before. The ancestors
+  of a run are not runs of the machine, and they are left alone.
 - The session of the studio never outlives the **token of the caller**:
   the broker issues the token for a short life and the broker does not
   renew it, so a session that outlived the token held a credential that

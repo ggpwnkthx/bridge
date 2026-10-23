@@ -153,6 +153,29 @@ export function cwdOf(pid: number): string | undefined {
 }
 
 /**
+ * The processes that are the current process and its ancestors.
+ *
+ * A run of the runner is the child of the shell that started it, and
+ * the child of the `bun run` that started it: those processes are not
+ * the runs that came before, and they are never killed. The parent of
+ * a run started by `bun run scripts/dev-stack.ts` carries the command
+ * of the run in its own command line, and the runner would take it for
+ * a run of the machine.
+ */
+export function ancestry(pid: number): number[] {
+  const parents = new Map(psRows().map((row) => [row.pid, row.ppid]))
+  const chain: number[] = []
+  let current = pid
+  while (Number.isInteger(current) && current > 1 && !chain.includes(current)) {
+    chain.push(current)
+    const parent = parents.get(current)
+    if (parent === undefined) break
+    current = parent
+  }
+  return chain
+}
+
+/**
  * The processes that run a script of a checkout of the machine.
  *
  * The runs of the stack that started before the registry existed, or

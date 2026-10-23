@@ -46,6 +46,7 @@ import { createServer } from 'node:net'
 import { pathToFileURL } from 'node:url'
 import {
   alive,
+  ancestry,
   commandOf,
   cwdOf,
   listeners,
@@ -223,8 +224,13 @@ async function stopPreviousRun(): Promise<void> {
   const previous = registry.foreign()
   // The runs of the stack that are alive without a registry behind them:
   // a run that started before the registry, or one whose registry was
-  // erased, is stopped here too.
-  const orphans = runners('dev-stack.ts', BRIDGE_DIR).filter((pid) => pid !== process.pid)
+  // erased, is stopped here too. The ancestors of this run are not
+  // runs of the machine: the shell that started it, and the `bun run`
+  // that started it, are never killed.
+  const ancestors = ancestry(process.pid)
+  const orphans = runners('dev-stack.ts', BRIDGE_DIR).filter(
+    (pid) => pid !== process.pid && !ancestors.includes(pid)
+  )
   if (previous.length === 0 && orphans.length === 0) {
     step('no previous run of the stack')
     return
