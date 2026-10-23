@@ -24,7 +24,9 @@
     "test": "bun test test/unit test/contract",
     "test:unit": "bun test test/unit",
     "test:contract": "bun test test/contract",
-    "test:all": "bun test"
+    "test:all": "bun test",
+    "test:compat": "bun run scripts/compatibility.ts",
+    "check:compatibility": "bun run scripts/check-compatibility.ts"
   },
   "dependencies": {
     "hono": "4.13.13",

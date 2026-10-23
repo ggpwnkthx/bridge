@@ -1,0 +1,17 @@
+{
+  "version": 1,
+  "repositories": {
+    "shuttle": {
+      "url": "https://github.com/ggpwnkthx/shuttle.git",
+      "commit": "76b3ff8c34019f1cdb32d7e8c135e785ef3da725"
+    },
+    "hub": {
+      "url": "https://github.com/ggpwnkthx/hub.git",
+      "commit": "ffb0bd56c86a0064c212c5d7358e7cff11640394"
+    },
+    "depot": {
+      "url": "https://github.com/ggpwnkthx/depot.git",
+      "commit": "f39a0a7fa46bbec419e1a6da428c75d3fc7392cc"
+    }
+  }
+}

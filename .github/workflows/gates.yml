@@ -21,12 +21,39 @@ jobs:
       - uses: actions/checkout@v4
       - uses: oven-sh/setup-bun@v2
         with:
+          # The version of the runtime is the one of the image of the
+          # studio and the one of the `engines` of the package.
           bun-version: latest
       - run: bun install --frozen-lockfile
       - run: bun run typecheck
       - run: bun run lint
       - run: bun run format:check
+      - run: bun run check:compatibility
       - run: bun test test/unit test/contract
+
+  compatibility:
+    name: the compatibility of the baseline
+    runs-on: ubuntu-latest
+    steps:
+      # The harness clones the gateway, the broker and the backend at
+      # the revisions of the manifest `compatibility.json` and it drives
+      # the studio against them. The workflow does not hold a revision
+      # of its own: the check of the drift refuses it when it does.
+      - uses: actions/checkout@v4
+        with:
+          repository: ggpwnkthx/bridge
+          path: bridge
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - name: the installation
+        working-directory: bridge
+        run: bun install --frozen-lockfile
+      - name: the database of the development machine
+        run: sudo apt-get update && sudo apt-get install -y postgresql-16
+      - name: the compatibility of the baseline
+        working-directory: bridge
+        run: bun run test:compat
 
   interface:
     name: the interface of the studio
@@ -34,6 +61,9 @@ jobs:
     steps:
       # The studio needs the three other services of the platform: the
       # runner of the development machine looks for them next to it.
+      # The checkouts are the head of the three repositories: it is the
+      # platform that is being built, and the job of the compatibility
+      # above is the one of the baseline.
       - uses: actions/checkout@v4
         with:
           repository: ggpwnkthx/bridge

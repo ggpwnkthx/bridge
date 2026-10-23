@@ -26,6 +26,14 @@
  *   DEV_HUB_DIR      the checkout of the broker      (default: ../hub)
  *   DEV_DEPOT_DIR    the checkout of the backend     (default: ../depot)
  *   DEV_PG_PORT      the port of PostgreSQL           (default: 5433)
+ *   DEV_IDP_PORT     the port of the identity provider (default: 5556)
+ *   DEV_SHUTTLE_PORT the port of the gateway          (default: 8080)
+ *   DEV_BRIDGE_PORT  the port of the studio           (default: 8081)
+ *   DEV_HUB_PORT     the port of the broker           (default: 8082)
+ *   DEV_DEPOT_PORT   the port of the backend          (default: 8083)
+ *   DEV_WORK_DIR     the directory of the state of the run (default: .dev)
+ *   DEV_PG_DIR       the directory of the data of PostgreSQL
+ *                    (default: the work directory of the run)
  *   DEV_FRESH        "1" drops the database of a previous run
  */
 
@@ -56,11 +64,11 @@ import { drift, type Migrations, readMigrations } from './dev-schema'
 /** The root of the studio. */
 const BRIDGE_DIR = resolve(import.meta.dir, '..')
 /** The directory of the state of the stack. */
-const WORK_DIR = join(BRIDGE_DIR, '.dev')
+const WORK_DIR = resolve(process.env.DEV_WORK_DIR ?? join(BRIDGE_DIR, '.dev'))
 /** The directory of the registry of the processes of the runs of the stack. */
 const PROCESS_DIR = join(WORK_DIR, 'processes')
 /** The directory of the data of the database of the stack. */
-const PG_DIR = join(WORK_DIR, 'pg')
+const PG_DIR = resolve(process.env.DEV_PG_DIR ?? join(WORK_DIR, 'pg'))
 
 /** The checkout of the gateway. */
 const SHUTTLE_DIR = resolve(process.env.DEV_SHUTTLE_DIR ?? join(BRIDGE_DIR, '..', 'shuttle'))
@@ -72,11 +80,11 @@ const DEPOT_DIR = resolve(process.env.DEV_DEPOT_DIR ?? join(BRIDGE_DIR, '..', 'd
 /** The ports of the stack. */
 const PORTS = {
   postgres: Number(process.env.DEV_PG_PORT ?? 5433),
-  idp: 5556,
-  shuttle: 8080,
-  bridge: 8081,
-  hub: 8082,
-  depot: 8083,
+  idp: Number(process.env.DEV_IDP_PORT ?? 5556),
+  shuttle: Number(process.env.DEV_SHUTTLE_PORT ?? 8080),
+  bridge: Number(process.env.DEV_BRIDGE_PORT ?? 8081),
+  hub: Number(process.env.DEV_HUB_PORT ?? 8082),
+  depot: Number(process.env.DEV_DEPOT_PORT ?? 8083),
 } as const
 
 /** The urls of the stack. */
@@ -252,9 +260,6 @@ async function stopPreviousDatabase(): Promise<void> {
     encoding: 'utf8',
   })
   const report = `${result.stdout}${result.stderr}`
-  // The runtime of Bun names the code of the exit `exitCode` and the
-  // types of the runtime name it `status`: a check on `status` is a
-  // check on nothing.
   if (exitCodeOf(result) !== 0 && !/is server running/i.test(report)) {
     step(`the database of the previous run is left as it is: ${result.stderr.trim()}`)
   }
