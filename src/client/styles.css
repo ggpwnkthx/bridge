@@ -103,10 +103,17 @@ textarea {
 
 /* The frame */
 
+.app {
+  display: flex;
+  flex-direction: column;
+  height: 100dvh;
+}
+
 .topbar {
   display: flex;
   align-items: center;
   gap: 10px;
+  flex: none;
   height: 56px;
   padding-inline: 20px;
   border-bottom: 1px solid var(--line);
@@ -165,7 +172,8 @@ textarea {
 .layout {
   display: grid;
   grid-template-columns: 260px 1fr;
-  height: calc(100% - 56px);
+  flex: 1 1 auto;
+  min-height: 0;
 }
 
 /* The scrim of the collections, on a small screen. */
@@ -180,6 +188,7 @@ textarea {
 .sidebar {
   display: flex;
   flex-direction: column;
+  min-height: 0;
   border-inline-end: 1px solid var(--line);
   background: var(--panel);
   overflow-y: auto;
@@ -203,7 +212,9 @@ textarea {
   font-family: var(--mono);
   font-size: 11px;
   color: var(--muted);
-  word-break: break-all;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .collections {
@@ -214,16 +225,32 @@ textarea {
 }
 
 .collection {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  padding: 8px 10px;
+  display: block;
+  width: 100%;
+  padding: 7px 10px;
   border: 0;
   border-radius: 8px;
   background: transparent;
   text-align: start;
   cursor: pointer;
+}
+
+/* The name of the collection, and what the backend lets the caller do
+   with it. The words are the ones of the backend. */
+
+.collection-text {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.collection-actions {
+  color: var(--muted);
+  font-size: 11px;
+  letter-spacing: 0.01em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .collection:hover {
@@ -241,25 +268,7 @@ textarea {
   white-space: nowrap;
 }
 
-.collection-actions {
-  display: flex;
-  gap: 3px;
-}
-
-.tag {
-  padding: 1px 6px;
-  border-radius: 999px;
-  background: var(--panel-2);
-  color: var(--muted);
-  font-size: 10px;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-}
-
-/* The tag of the collection that is open: it is cut out of the row, and
-   its label keeps the accent of the row. */
-.collection.active .tag {
-  background: var(--panel);
+.collection.active .collection-actions {
   color: var(--accent);
 }
 
@@ -295,6 +304,7 @@ textarea {
 }
 
 .content {
+  min-height: 0;
   overflow: auto;
   padding-block: 20px 48px;
   padding-inline: 24px;
@@ -411,8 +421,10 @@ button:disabled {
 
 table {
   width: 100%;
+  min-width: 640px;
   border-collapse: collapse;
   font-size: 13px;
+  table-layout: fixed;
 }
 
 th,
@@ -421,9 +433,29 @@ td {
   text-align: start;
   border-bottom: 1px solid var(--line);
   white-space: nowrap;
-  max-width: 320px;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+/* The name of the record stays in sight while the row scrolls: the
+   caller always knows which record the row is. */
+
+th:first-child,
+td:first-child {
+  position: sticky;
+  inset-inline-start: 0;
+  z-index: 1;
+  background: var(--panel);
+}
+
+th:first-child {
+  z-index: 2;
+  width: 260px;
+  background: var(--panel-2);
+}
+
+tbody tr:hover td:first-child {
+  background: var(--panel-2);
 }
 
 th {
@@ -434,7 +466,9 @@ th {
   font-weight: 600;
   font-size: 11px;
   letter-spacing: 0.06em;
+  line-height: 1.25;
   text-transform: uppercase;
+  white-space: normal;
 }
 
 tbody tr {
@@ -460,7 +494,10 @@ td.null {
 /* The first cell of a row opens the record with the keyboard. */
 
 .row-open {
-  display: block;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 1px;
   width: 100%;
   padding: 0;
   border: 0;
@@ -469,9 +506,25 @@ td.null {
   font: inherit;
   text-align: start;
   cursor: pointer;
+}
+
+/* The name of the record, and the identifier of the record under it. */
+
+.row-title {
+  max-width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.row-id {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--muted);
 }
 
 /* The focus of the row is always seen: the row is the way to the
@@ -489,6 +542,24 @@ td.empty {
   padding: 28px 12px;
   color: var(--muted);
   text-align: center;
+}
+
+/* The empty state of a view that has nothing to show yet. */
+
+.empty-panel {
+  padding: 28px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--panel);
+  color: var(--muted);
+  text-align: center;
+}
+
+.empty-panel strong {
+  display: block;
+  margin-bottom: 4px;
+  color: var(--text);
+  font-weight: 600;
 }
 
 td.empty strong {
@@ -525,6 +596,10 @@ td.empty strong {
   margin-top: 10px;
 }
 
+td.empty .notice-actions {
+  justify-content: center;
+}
+
 /* The drawer of a record */
 
 .drawer-backdrop {
@@ -550,14 +625,17 @@ td.empty strong {
 .drawer h2 {
   margin: 0 0 4px;
   font-size: 15px;
+  line-height: 1.35;
 }
 
 .drawer .meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 10px;
   color: var(--muted);
   font-size: 12px;
   font-family: var(--mono);
   margin-bottom: 16px;
-  word-break: break-all;
 }
 
 .field {
@@ -591,6 +669,13 @@ td.empty strong {
   color: var(--muted);
   -webkit-text-fill-color: var(--muted);
   cursor: not-allowed;
+}
+
+/* A hint: the words that explain a control or a value. */
+
+.hint {
+  color: var(--muted);
+  font-size: 12px;
 }
 
 .field .hint {
@@ -656,6 +741,27 @@ td.empty strong {
   cursor: pointer;
   color: var(--muted);
   font-size: 12px;
+}
+
+/* The syntax of the query, and the knobs of the contract. */
+
+.advanced-body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 10px;
+  max-width: 560px;
+}
+
+.advanced-body .hint {
+  margin: 0;
+}
+
+.toolbar-hints {
+  margin: -6px 0 12px;
+  color: var(--muted);
+  font-size: 12px;
+  max-width: 92ch;
 }
 
 /* The small screen
@@ -785,7 +891,9 @@ td.empty strong {
 
   .row-open {
     display: flex;
-    align-items: center;
+    flex-direction: column;
+    align-items: flex-start;
+    justify-content: center;
     min-height: 44px;
   }
 

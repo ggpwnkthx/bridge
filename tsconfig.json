@@ -6,6 +6,8 @@
     "moduleResolution": "bundler",
     "moduleDetection": "force",
     "allowImportingTsExtensions": true,
+    "jsx": "react-jsx",
+    "jsxImportSource": "preact/compat",
     "verbatimModuleSyntax": true,
     "noEmit": true,
     "strict": true,

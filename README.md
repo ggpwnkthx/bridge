@@ -10,7 +10,8 @@ the contract of the version `v1` of the API and nothing else. It never
 reaches the database, it never reads a manifest and it never decides
 what a caller may do.
 
-- **Runtime:** TypeScript on Bun 1.4.3, Hono at the HTTP boundary.
+- **Runtime:** TypeScript on Bun 1.4.3, Hono at the HTTP boundary, honox
+  for the routes and preact for the user interface.
 - **Identity:** the callers authenticate against
   [Hub](https://github.com/ggpwnkthx/hub), the broker of the platform,
   with the authorization code flow and PKCE.
@@ -47,6 +48,7 @@ backend with the token of the caller.
 | `bun run build` | The bundle of the script of the browser. |
 | `bun run start` | The studio. |
 | `bun run dev` | The studio, with a reload of the server. |
+| `bun run dev:client` | The bundle of the script of the browser, built again when a component changes. |
 | `bun run dev:stack` | The studio **and** the broker, the gateway and the backend, in one process. |
 | `bun run dev:smoke` | The login of a caller and a write, through the whole stack. |
 | `bun run dev:ui` | The interface of the studio in a browser: its shapes, its writes and its accessibility. |
@@ -75,7 +77,7 @@ bun install
 bun run dev:stack
 ```
 
-The studio answers at `http://localhost:8081/w/{workspaceId}/`, the
+The studio answers at `http://localhost:8081/w/{workspaceId}`, the
 gateway at `http://localhost:8080`, the broker at `http://localhost:8082`
 and the backend at `http://localhost:8083`. The caller signs in with
 `alice@shuttle.test` / `alice-password`. The wiring is described in
@@ -90,9 +92,13 @@ bun run build
 bun run start
 ```
 
+The build writes the script of the browser and the styles of the studio
+in `dist/client`: the studio serves them at `/static/client.js` and
+`/static/styles.css`.
+
 The studio listens on `http://localhost:8081` by default. It redirects
 the browser to the broker for the login, and it comes back to
-`/w/{workspaceId}/` when the login is complete.
+`/w/{workspaceId}` when the login is complete.
 
 ## The configuration
 

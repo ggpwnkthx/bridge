@@ -9,7 +9,7 @@
 
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
 import { SignJWT, exportJWK, generateKeyPair } from 'jose'
-import { createApp } from '../../src/app/app'
+import { createStudioApp } from '../../src/server'
 import { OidcClient } from '../../src/domains/identity/oidc'
 import { MemoryLoginStateStore, MemorySessionStore } from '../../src/domains/identity/session'
 import { emptyAssets } from '../../src/platform/assets'
@@ -182,7 +182,7 @@ function studio() {
     BRIDGE_WORKSPACES: WORKSPACE,
     BRIDGE_SECURE_COOKIES: 'false',
   })
-  return createApp({
+  return createStudioApp({
     config,
     sessions: new MemorySessionStore({ ttlSeconds: 600 }),
     logins: new MemoryLoginStateStore(),

@@ -1002,7 +1002,7 @@ async function main(): Promise<void> {
   console.log('')
   console.log('  The platform is up')
   console.log('  ─────────────────────────────────────────────')
-  console.log(`  studio        ${URLS.bridge}/w/${WORKSPACE_ID}/`)
+  console.log(`  studio        ${URLS.bridge}/w/${WORKSPACE_ID}`)
   console.log(`  gateway       ${URLS.shuttle}`)
   console.log(`  broker        ${URLS.hub}`)
   console.log(`  backend       ${URLS.depot}`)

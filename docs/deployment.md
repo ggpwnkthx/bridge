@@ -18,7 +18,7 @@ distinguished by their path:
 
 | The path | The service |
 | --- | --- |
-| `/w/{workspaceId}/` | The studio. |
+| `/w/{workspaceId}` | The studio. |
 | `/w/{workspaceId}/api/*` | The api of the studio. |
 | `/ws/{workspaceId}/v1/*` | The backend. |
 
@@ -39,7 +39,7 @@ the studio refuses a workspace it does not serve.
   "routes": [
     {
       "id": "studio",
-      "match": { "host": "studio.example.com", "path": "/w/{workspaceId}/" },
+      "match": { "host": "studio.example.com", "path": "/w/{workspaceId}" },
       "upstream": "http://bridge:8081",
       "auth": { "mode": "none" }
     },

@@ -20,6 +20,20 @@ the versions follow [semantic versioning](https://semver.org).
 
 ### Changed
 
+- The studio is written with **honox** and **preact**. The routes of the
+  studio are the files of `src/routes`: the path of a route is the path
+  of its file, and the files of a directory hold the renderer, the
+  middleware, the page of a failure and the page of a path that does not
+  exist. The user interface is written in preact, in TSX files, under
+  `src/components`: the frame, the rows, the aggregate, the audit log
+  and the drawer of a record. The document of a page is rendered by the
+  server, and the script of the browser takes it over when it answers.
+- The assets of the studio are served at `/static`: the bundle of the
+  script of the browser is `/static/client.js` and the styles of the
+  studio are `/static/styles.css`. The build writes them in `dist/client`.
+- The studio answers at `/w/{workspaceId}`, without the trailing slash:
+  the path of a route is the path of its file, and the file of a
+  directory is its path.
 - The runner of the development machine repairs the drift of the schema:
   a migration of a checkout that was renamed or changed after it was
   applied builds the database of the service again, and the runner says

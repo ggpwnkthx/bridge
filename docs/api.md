@@ -71,7 +71,7 @@ session is deleted.
 
 ## The studio
 
-### `GET /w/{workspaceId}/`
+### `GET /w/{workspaceId}`
 
 The document of the studio. The workspace of the path is written into
 the document, and the server has already checked that the studio may
@@ -80,7 +80,7 @@ serve it.
 The answer is `403 WORKSPACE_NOT_ALLOWED` for a workspace that the
 deployment does not serve.
 
-### `GET /assets/{file}`
+### `GET /static/{file}`
 
 The bundle of the script of the browser and the styles of the studio.
 

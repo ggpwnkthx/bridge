@@ -67,7 +67,7 @@ async function waitForStudio(): Promise<boolean> {
 
 /** Signs the caller in, the way a browser does. */
 async function signIn(page: Page): Promise<void> {
-  await page.goto(`${BRIDGE_URL}/w/${WORKSPACE}/`, { waitUntil: 'domcontentloaded' })
+  await page.goto(`${BRIDGE_URL}/w/${WORKSPACE}`, { waitUntil: 'domcontentloaded' })
   for (let attempt = 0; attempt < 8; attempt += 1) {
     // The caller is signed in when the frame of the studio is on the
     // screen: the url alone says nothing, the studio answers that url
@@ -76,7 +76,7 @@ async function signIn(page: Page): Promise<void> {
       .waitForSelector('.toolbar, .notice', { timeout: 3000 })
       .then(() => true)
       .catch(() => false)
-    if (signed && page.url().includes(`/w/${WORKSPACE}/`)) return
+    if (signed && page.url().includes(`/w/${WORKSPACE}`)) return
     // The page of the identity provider is not the studio: it asks for
     // the account and the password of the caller.
     await page
@@ -151,7 +151,7 @@ async function main(): Promise<void> {
   page.on('console', (message) => {
     if (message.type() === 'error') failures.push(`the console of the browser: ${message.text()}`)
   })
-  check('the studio answers after the login', page.url().includes(`/w/${WORKSPACE}/`), page.url())
+  check('the studio answers after the login', page.url().includes(`/w/${WORKSPACE}`), page.url())
   await page.waitForSelector('.row-open', { timeout: 15000 })
 
   step('the rows of the collection')
@@ -214,12 +214,16 @@ async function main(): Promise<void> {
   }
 
   step('the change of a record')
-  const identity = await page.evaluate(() => ({
-    title: document.getElementById('drawer-title')?.textContent ?? '',
-    collection: document.querySelector('.drawer .meta')?.textContent ?? '',
-  }))
-  const recordId = identity.title.replace('Record ', '').trim()
-  const collection = identity.collection.trim()
+  const identity = await page.evaluate(() => {
+    const head = document.querySelector('.drawer-head') as HTMLElement | null
+    return {
+      title: document.getElementById('drawer-title')?.textContent ?? '',
+      collection: head?.dataset.collection ?? '',
+      record: head?.dataset.record ?? '',
+    }
+  })
+  const recordId = identity.record
+  const collection = identity.collection
   check('the drawer names the record it shows', recordId.length > 0, identity.title)
 
   const read = async (): Promise<Record<string, unknown>> =>

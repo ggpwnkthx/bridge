@@ -41,7 +41,7 @@ and the binaries of **PostgreSQL 15 or later** (`initdb` and `pg_ctl` in
 | Bridge | 8081 | The studio, with a reload of the server. |
 
 The studio answers at
-<http://localhost:8081/w/22222222-2222-4222-8222-222222222222/> and the
+<http://localhost:8081/w/22222222-2222-4222-8222-222222222222> and the
 caller signs in with `alice@shuttle.test` / `alice-password`.
 
 ## What the runner writes
@@ -122,6 +122,21 @@ holds one of its ports is stopped even when the registry was erased.
 A process that is not a service of the stack is never touched: the
 runner kills the runs of `dev:stack` and the services they started,
 and nothing else.
+
+## The studio alone
+
+The studio runs on its own, against the services that are already up:
+
+```bash
+bun run dev          # the studio, with a reload of the server
+bun run dev:client   # the script of the browser, built again on every change
+```
+
+The studio is written in TypeScript and Bun runs it from the sources:
+the server reloads itself when a file changes. The script of the browser
+is a bundle, and the bundle is built by `bun run build`: `bun run
+dev:client` follows the components of the studio and builds it again
+when one of them changes.
 
 ## The smoke test
 

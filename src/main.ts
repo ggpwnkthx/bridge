@@ -7,13 +7,13 @@
  * requests it cannot serve correctly.
  */
 
-import { createApp } from './app/app'
 import { OidcClient } from './domains/identity/oidc'
 import { MemoryLoginStateStore, MemorySessionStore } from './domains/identity/session'
 import { createLogger } from './observability/logger'
 import { createAssets } from './platform/assets'
 import { readConfig } from './platform/config'
 import { startServer } from './platform/bun/server'
+import { createStudioApp } from './server'
 
 const config = readConfig(process.env)
 const logger = createLogger({
@@ -28,12 +28,12 @@ const oidc = new OidcClient({
   redirectUri: config.hub.redirectUri,
 })
 
-const app = createApp({
+const app = createStudioApp({
   config,
   sessions: new MemorySessionStore({ ttlSeconds: config.sessionTtlSeconds }),
   logins: new MemoryLoginStateStore(),
   oidc,
-  assets: createAssets({ directory: new URL('../public', import.meta.url).pathname }),
+  assets: createAssets({ directory: new URL('../dist/client', import.meta.url).pathname }),
   logger,
 })
 

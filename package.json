@@ -13,6 +13,7 @@
     "start": "bun run src/main.ts",
     "predev": "bun run build",
     "dev": "bun --watch src/main.ts",
+    "dev:client": "bun run scripts/build.ts --watch",
     "dev:stack": "bun run scripts/dev-stack.ts",
     "dev:smoke": "bun run scripts/dev-smoke.ts",
     "dev:ui": "bun run scripts/dev-ui.ts",
@@ -27,7 +28,10 @@
   },
   "dependencies": {
     "hono": "4.13.13",
+    "honox": "0.1.62",
     "jose": "6.2.12",
+    "preact": "11.0.1",
+    "preact-render-to-string": "6.8.1",
     "zod": "4.6.7"
   },
   "devDependencies": {

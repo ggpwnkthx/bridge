@@ -50,7 +50,7 @@ COPY package.json ./
 
 # The script of the browser is built in the image: the studio serves it,
 # and it never builds anything at the time of a request.
-RUN bun run scripts/build.ts && chown -R bun:bun /app/public
+RUN bun run scripts/build.ts && chown -R bun:bun /app/dist
 
 # The studio runs as a user that is not root: a container that is root on
 # the host of the container is root on the host.

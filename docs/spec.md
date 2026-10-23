@@ -150,10 +150,11 @@ that the gateway writes into the headers of the request.
 1. The studio serves one document and the assets of it. The document
    holds the frame of the application and the workspace of the path; the
    script of the browser reads everything else from the api.
-2. The script of the browser is written in TypeScript and it is bundled
-   into one file by the build of the repository.
+2. The script of the browser is written in TypeScript and preact, and it
+   is bundled into one file by the build of the repository.
 3. The studio never writes a value of a row as markup: the script builds
-   every element of the interface with the document itself.
+   every element of the interface with preact, which writes the values
+   of a row as text.
 
 ### 8.2 The answers
 
@@ -178,7 +179,7 @@ that the gateway writes into the headers of the request.
 | `/login` | `GET` | The redirect to the broker. |
 | `/auth/callback` | `GET` | The end of the login, and the redirect to the studio. |
 | `/logout` | `POST` | The end of the session. |
-| `/w/{workspaceId}/` | `GET` | The studio. |
+| `/w/{workspaceId}` | `GET` | The studio. |
 | `/w/{workspaceId}/api/session` | `GET` | The identity of the caller. |
 | `/w/{workspaceId}/api/schema` | `GET` | The metadata of the collections. |
 | `/w/{workspaceId}/api/schema/{collection}` | `GET` | The metadata of one collection. |
@@ -186,7 +187,7 @@ that the gateway writes into the headers of the request.
 | `/w/{workspaceId}/api/items/{collection}/{id}` | `GET`, `PATCH`, `DELETE` | One row, its change and its deletion. |
 | `/w/{workspaceId}/api/aggregate/{collection}` | `GET` | The groups of an aggregate. |
 | `/w/{workspaceId}/api/audit` | `GET` | A page of the audit log. |
-| `/assets/*` | `GET` | The assets of the studio. |
+| `/static/*` | `GET` | The assets of the studio. |
 
 ## 9. The process
 
