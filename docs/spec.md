@@ -81,9 +81,11 @@ that the gateway writes into the headers of the request.
 1. The signature is a JWS with a detached payload. The studio rebuilds
    the payload from the request and from the identity headers, and it
    verifies the signature with the library.
-2. The versions `v5` (an `ES256` signature with the public key of the
-   deployment) and `v4` (an `HS256` signature with the derived key) are
-   understood. A version that is not known is refused.
+2. The version `v5` (an `ES256` signature with the public key of the
+   deployment) is understood. A version that is not known is refused: the
+   gateway removed the symmetric format `v4` in its `1.0` release, and
+   the studio does not accept a signature that anybody with the derived
+   key could write.
 3. A deployment that gave a key to the studio refuses a request whose
    signature does not verify, and a production environment refuses a
    request that carries no signature at all.
@@ -99,9 +101,13 @@ that the gateway writes into the headers of the request.
 
 1. A session lives for the lifetime of its configuration, and it is
    forgotten when it is over.
-2. A session holds the token of the caller, the profile of the caller and
+2. A session never outlives the token of the caller: the broker issues
+   the token for a short life and the broker does not renew it, so the
+   life of the session is the life of the token when the broker named
+   one, and the life of the configuration otherwise.
+3. A session holds the token of the caller, the profile of the caller and
    the token that protects the changes of the state.
-3. The store of the sessions is in the process. A deployment with several
+4. The store of the sessions is in the process. A deployment with several
    replicas needs a shared store, and the interface of the store is the
    one of [`src/domains/identity/session.ts`](../src/domains/identity/session.ts).
 
@@ -126,6 +132,10 @@ that the gateway writes into the headers of the request.
    contract.
 3. The studio never changes a code of an error: it forwards the code, the
    message and the identifier of the request of the backend as they are.
+   A refusal of the token of the caller is the one exception: a `401` is
+   the end of the session, so the studio answers
+   `AUTHENTICATION_REQUIRED`, it deletes the session and it sends the
+   browser back to the login.
 4. The validator of a record is carried from the answer of the backend to
    the request that writes it: the studio never writes a record without
    the validator it read.
@@ -169,7 +179,10 @@ that the gateway writes into the headers of the request.
    `INVALID_QUERY`, `INVALID_REQUEST`, `NOT_FOUND` and
    `INTERNAL_ERROR`.
 4. A refusal of the backend is a refusal of the studio: the status and
-   the code of the backend are forwarded.
+   the code of the backend are forwarded. A refusal of the token of the
+   caller — a `401` of the platform — is the end of the session: the
+   studio answers `AUTHENTICATION_REQUIRED`, it deletes the session and
+   it sends the browser back to the login.
 
 ### 8.3 The routes
 
@@ -185,6 +198,9 @@ that the gateway writes into the headers of the request.
 | `/w/{workspaceId}/api/schema/{collection}` | `GET` | The metadata of one collection. |
 | `/w/{workspaceId}/api/items/{collection}` | `GET`, `POST` | A page of the rows, and the creation of one. |
 | `/w/{workspaceId}/api/items/{collection}/{id}` | `GET`, `PATCH`, `DELETE` | One row, its change and its deletion. |
+| `/w/{workspaceId}/api/items/{collection}/{id}/versions` | `GET` | The history of the versions of a row. |
+| `/w/{workspaceId}/api/items/{collection}/{id}/versions/{version}` | `GET` | One version of a row. |
+| `/w/{workspaceId}/api/items/{collection}/{id}/rollback` | `POST` | The rollback of a row to one of its versions. |
 | `/w/{workspaceId}/api/aggregate/{collection}` | `GET` | The groups of an aggregate. |
 | `/w/{workspaceId}/api/audit` | `GET` | A page of the audit log. |
 | `/static/*` | `GET` | The assets of the studio. |

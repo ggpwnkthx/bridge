@@ -7,6 +7,20 @@ the versions follow [semantic versioning](https://semver.org).
 
 ### Added
 
+- The **baseline** of the compatibility: the file `compatibility.json`
+  owns the revisions of the gateway, the broker and the backend that the
+  studio is tested against, and `bun run test:compat` drives the studio
+  against them — the login of a caller, the catalog of a workspace, a
+  collection and a write. The gate `bun run check:compatibility`
+  refuses a documentation and a workflow that do not agree with the
+  manifest. The baseline is described in
+  [`docs/compatibility.md`](docs/compatibility.md).
+- The **history of a record**: the studio reads the versions of a record
+  and it rolls a record back to one of them, with the routes
+  `GET /w/{workspaceId}/api/items/{collection}/{id}/versions`,
+  `GET /w/{workspaceId}/api/items/{collection}/{id}/versions/{version}`
+  and `POST /w/{workspaceId}/api/items/{collection}/{id}/rollback`. The
+  drawer of a record shows the versions that are not the current one.
 - The test of the interface of the studio: `bun run dev:ui` drives it in
   a browser, against the development machine, and checks the shapes the
   studio shows, the writes it makes and its accessibility with axe. The
@@ -18,8 +32,36 @@ the versions follow [semantic versioning](https://semver.org).
   the login of a caller and a write through the whole stack. The wiring
   is described in [`docs/development.md`](docs/development.md).
 
+### Fixed
+
+- The session of the studio never outlives the **token of the caller**:
+  the broker issues the token for a short life and the broker does not
+  renew it, so a session that outlived the token held a credential that
+  the platform refuses. The session now ends with the token, and the
+  browser is sent back to the login.
+- A refusal of the **token of the caller** is the end of the session:
+  the studio answers `AUTHENTICATION_REQUIRED` and it deletes the
+  session. Before, the refusal of the gateway was read as the code
+  `UNKNOWN` — the gateway answers a flat body and the studio only knew
+  the envelope of the backend — and the browser was left in front of a
+  failure that it could not do anything about.
+- The runner of the development machine found the **processes of the
+  runs that came before it**: the runtime of Bun names the code of the
+  exit of a command `exitCode` and the check was on `status`, which
+  nothing carries. The registry of the processes and the ports of the
+  stack are read again.
+- The drawer of a record does not take the focus **while the caller is
+  writing**: the focus was taken when the record arrived, and it was
+  taken from the control the caller was writing in — what the caller
+  wrote was lost. The focus is taken when the drawer opens now.
+
 ### Changed
 
+- The studio understands the **format `v5`** of the signature of the
+  gateway and nothing else. The symmetric format `v4` is removed: the
+  gateway removed it in its `1.0` release, because its key was shared
+  with the upstreams and an upstream that verified an identity could
+  mint one. The variable `BRIDGE_GATEWAY_IDENTITY_KEY` is gone with it.
 - The studio is written with **honox** and **preact**. The routes of the
   studio are the files of `src/routes`: the path of a route is the path
   of its file, and the files of a directory hold the renderer, the

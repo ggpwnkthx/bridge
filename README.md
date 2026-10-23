@@ -56,6 +56,8 @@ backend with the token of the caller.
 | `bun run lint` / `bun run format:check` | The style of the repository. |
 | `bun test test/unit` | The rules of the domains. |
 | `bun test test/contract` | The contract of the http surface. |
+| `bun run test:compat` | The studio against the **baseline** of the platform: the revisions of `compatibility.json`. |
+| `bun run check:compatibility` | The check of the drift of the baseline. |
 
 ## The development machine
 
@@ -100,6 +102,20 @@ The studio listens on `http://localhost:8081` by default. It redirects
 the browser to the broker for the login, and it comes back to
 `/w/{workspaceId}` when the login is complete.
 
+## The compatibility
+
+The studio is a client of the platform: it talks to the broker, to the
+gateway and to the backend. The file `compatibility.json` owns the
+revisions of the three that the studio is tested against, and the
+harness of the compatibility drives the studio against them:
+
+```bash
+bun run test:compat
+```
+
+The baseline and its rules are described in
+[`docs/compatibility.md`](docs/compatibility.md).
+
 ## The configuration
 
 | The variable | What it holds |
@@ -110,7 +126,6 @@ the browser to the broker for the login, and it comes back to
 | `BRIDGE_HUB_CLIENT_ID` / `BRIDGE_HUB_CLIENT_SECRET` | The client of the studio at the broker. |
 | `BRIDGE_WORKSPACES` | The workspaces the studio may serve. It is required in a production environment. |
 | `BRIDGE_GATEWAY_IDENTITY_PUBLIC_KEY` | The public key of the gateway, for the signature `v5`. |
-| `BRIDGE_GATEWAY_IDENTITY_KEY` | The derived key of the gateway, in base64, for the signature `v4`. |
 | `BRIDGE_REQUIRE_GATEWAY_IDENTITY` | Whether a request that did not go through the gateway is refused. |
 | `BRIDGE_BIND_GATEWAY_WORKSPACE` | Whether the workspace of the gateway has to be the workspace of the studio. |
 
@@ -127,6 +142,7 @@ The whole list is in [`.env.example`](.env.example) and the rules are in
 | [`docs/operations.md`](docs/operations.md) | The probes, the logs, the configuration and the failures. |
 | [`docs/deployment.md`](docs/deployment.md) | The wiring of the studio with the gateway, the broker and the backend. |
 | [`docs/development.md`](docs/development.md) | The development machine: the runner of the four services and its fixtures. |
+| [`docs/compatibility.md`](docs/compatibility.md) | The baseline of the platform: the revisions the studio is tested against. |
 
 ## The status of the release
 

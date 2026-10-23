@@ -152,6 +152,29 @@ identity provider), reads the catalog of the workspace, reads a
 collection and writes a row. It fails with the message of the service
 that refused.
 
+## The compatibility of the studio
+
+The studio is a client of the platform, and the platform moves. The
+revisions that the studio is tested against are the ones of
+`compatibility.json`, and the harness of the compatibility drives the
+studio against them:
+
+```bash
+bun run test:compat
+```
+
+The harness clones the gateway, the broker and the backend at the
+revisions of the manifest, it starts the stack of the run on the ports
+of the run and it drives the studio against it. The baseline and its
+rules are described in [`compatibility.md`](compatibility.md).
+
+The check of the drift refuses a documentation and a workflow that do
+not agree with the manifest:
+
+```bash
+bun run check:compatibility
+```
+
 ## The test of the interface
 
 The smoke test proves the flow of the api. The interface of the studio
@@ -209,11 +232,21 @@ the two urls of the callback (`http://localhost:8080/auth/callback` and
 ## The identity of the gateway
 
 The gateway signs the identity of every request it forwards, and the
-**backend** verifies that signature with the derived key of the
-deployment (`HMAC-SHA256(SHUTTLE_SESSION_SECRET, "shuttle-identity-signature-v1")`).
+**backend** verifies that signature with the public key of the
+deployment: the format `v5`, a JWS signed with `ES256` and the private
+key of the machine. The key of the machine is in the directory of the
+stack — the private one in `.dev/identity-key.pem`, the public one in
+`.dev/identity.key` — and the gateway signs with it because
+`SHUTTLE_IDENTITY_SIGNING_KEY` holds it.
+
 The studio is a client of the gateway in this shape, and it is reached
 by the browser directly, so it does not verify a signature of its own
 here. A deployment that puts the studio behind the gateway gives it the
-key and sets `BRIDGE_REQUIRE_GATEWAY_IDENTITY=true`: the rules are in
+**public** key of the deployment and sets
+`BRIDGE_REQUIRE_GATEWAY_IDENTITY=true`: the rules are in
 [`docs/deployment.md`](deployment.md) and in
 [`docs/spec.md`](spec.md) §4.
+
+The symmetric format of the earlier releases (`v4`) is not read by the
+studio: the gateway removed it in its `1.0` release, because its key was
+shared with the upstreams.

@@ -118,6 +118,24 @@ rows and a drawer, and the components of `src/components` are the whole
 of it. Every value of a row is read as text by preact, so nothing of a
 row of the backend can become markup.
 
+## The scripts
+
+The scripts of the repository are the tools of the development machine
+and of the gates. They are not part of the studio: nothing of `src/`
+imports them.
+
+| The script | What it does |
+| --- | --- |
+| `scripts/build.ts` | The bundle of the script of the browser and the styles of the studio. |
+| `scripts/dev-stack.ts` | The runner of the development machine: the four services of the platform, the database and the fixtures. |
+| `scripts/dev-smoke.ts` | The login of a caller and a write, through the whole stack. |
+| `scripts/dev-ui.ts` | The interface of the studio in a browser: its shapes, its writes and its accessibility. |
+| `scripts/compatibility.ts` | The harness of the compatibility: the studio against the baseline of `compatibility.json`. |
+| `scripts/check-compatibility.ts` | The check of the drift of the baseline: the manifest, the documentation and the workflow. |
+
+The baseline of the compatibility is described in
+[`compatibility.md`](compatibility.md).
+
 ## The flow of a call
 
 ```

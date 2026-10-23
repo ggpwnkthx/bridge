@@ -154,12 +154,13 @@ BRIDGE_GATEWAY_IDENTITY_PUBLIC_KEY="-----BEGIN PUBLIC KEY-----…"
 ```
 
 The studio verifies the signature with the public key, so it can check
-an identity and it cannot mint one. A deployment that still uses the
-symmetric format gives the derived key to the studio instead:
+an identity and it cannot mint one.
 
-```bash
-BRIDGE_GATEWAY_IDENTITY_KEY="$(base64 -w0 secrets/identity.key)"
-```
+The symmetric format of the earlier releases (`v4`) is **not** read by
+the studio: the gateway removed it in its `1.0` release, because its
+key was shared with the upstreams and an upstream that verified an
+identity could mint one. A gateway older than `1.0` is not a gateway
+the studio can be deployed behind.
 
 ## The order of the deployment
 

@@ -95,6 +95,15 @@ Every route that changes the state needs the token of the session in the
 header `x-bridge-csrf`. The token is read from
 `GET /w/{workspaceId}/api/session`.
 
+A route that changes the state of a row needs the validator of the row
+in the header `if-match`: the validator is read from the answer of
+`GET /w/{workspaceId}/api/items/{collection}/{id}` and it is carried
+from there to the write.
+
+A refusal of the token of the caller — a `401` of the platform — ends
+the session: the answer is `401 AUTHENTICATION_REQUIRED` and the browser
+is sent back to the login.
+
 ### `GET /w/{workspaceId}/api/session`
 
 ```json
@@ -201,6 +210,56 @@ row, and it is required.
 
 The deletion of a row. The header `if-match` carries the validator of the
 row, and it is required. The answer is `204`.
+
+### `GET /w/{workspaceId}/api/items/{collection}/{id}/versions`
+
+The history of a row: the versions that are not the current one, the
+newest first. The answer is `404 NOT_FOUND` when the collection keeps
+no history.
+
+```json
+{
+  "data": [
+    {
+      "version": 3,
+      "operation": "update",
+      "changedFields": ["title"],
+      "supersededAt": "2026-10-23T10:00:00.000Z",
+      "supersededBy": "b1c2d3e4-…"
+    }
+  ]
+}
+```
+
+### `GET /w/{workspaceId}/api/items/{collection}/{id}/versions/{version}`
+
+One version of a row, and the validator of it.
+
+```json
+{ "data": { "id": "r1", "version": 3, "title": "Hello" }, "etag": "\"v3\"" }
+```
+
+### `POST /w/{workspaceId}/api/items/{collection}/{id}/rollback`
+
+The rollback of a row to one of its versions. The body holds the version
+and the header `if-match` carries the validator of the row, and both are
+required.
+
+```bash
+curl -sS -X POST 'http://studio.example.com/w/22222222-…/api/items/articles/r1/rollback' \
+  -H 'cookie: bridge_session=…' \
+  -H 'x-bridge-csrf: …' \
+  -H 'if-match: "v4"' \
+  -H 'content-type: application/json' \
+  -d '{"version":3}'
+```
+
+```json
+{ "data": { "id": "r1", "version": 5, "title": "Hello" }, "etag": "\"v5\"" }
+```
+
+The version of the record never moves back: the record holds the version
+that follows the one it had.
 
 ### `GET /w/{workspaceId}/api/aggregate/{collection}`
 
