@@ -56,6 +56,7 @@ import {
 } from './dev-processes'
 import { exitCodeOf } from './spawn'
 import { drift, type Migrations, readMigrations } from './dev-schema'
+import { install, type Checkout, pending } from './dev-dependencies'
 
 // ---------------------------------------------------------------------------
 // The layout
@@ -76,6 +77,13 @@ const SHUTTLE_DIR = resolve(process.env.DEV_SHUTTLE_DIR ?? join(BRIDGE_DIR, '..'
 const HUB_DIR = resolve(process.env.DEV_HUB_DIR ?? join(BRIDGE_DIR, '..', 'hub'))
 /** The checkout of the backend. */
 const DEPOT_DIR = resolve(process.env.DEV_DEPOT_DIR ?? join(BRIDGE_DIR, '..', 'depot'))
+
+/** The checkouts of the repositories of the stack. */
+const CHECKOUTS: readonly Checkout[] = [
+  { name: 'shuttle', directory: SHUTTLE_DIR },
+  { name: 'hub', directory: HUB_DIR },
+  { name: 'depot', directory: DEPOT_DIR },
+]
 
 /** The ports of the stack. */
 const PORTS = {
@@ -585,21 +593,58 @@ async function admin(
 // The stack
 // ---------------------------------------------------------------------------
 
-async function main(): Promise<void> {
-  for (const [name, directory] of [
-    ['shuttle', SHUTTLE_DIR],
-    ['hub', HUB_DIR],
-    ['depot', DEPOT_DIR],
-  ] as const) {
-    if (!existsSync(join(directory, 'package.json'))) {
+/**
+ * Installs the dependencies of the checkouts of the stack.
+ *
+ * A checkout whose dependencies are not installed cannot run, and the
+ * machine installs them: the run of the stack is the moment where the
+ * machine is whole. A checkout that has its dependencies is left
+ * alone: the install is the work of the developer who changed them.
+ *
+ * The install is the one of the developer of the checkout — the
+ * lockfile of the checkout is read, and it is updated when the
+ * manifest of the checkout and its lockfile do not agree. The
+ * environment `DEV_SKIP_INSTALL=1` says that the machine does not
+ * install anything: a checkout without its dependencies is an error.
+ */
+async function installDependencies(): Promise<void> {
+  const skip = process.env.DEV_SKIP_INSTALL === '1'
+  const checkouts: readonly Checkout[] = [
+    { name: 'the studio', directory: BRIDGE_DIR },
+    ...CHECKOUTS,
+  ]
+  for (const checkout of checkouts) {
+    if (!pending(checkout)) continue
+    if (skip) {
       fail(
-        `the checkout of ${name} was not found at ${directory}: set DEV_${name.toUpperCase()}_DIR`
+        `the dependencies of ${checkout.name} are not installed and the install is skipped: run "bun install" in ${checkout.directory}`
       )
     }
-    if (!existsSync(join(directory, 'node_modules'))) {
-      fail(`the dependencies of ${name} are not installed: run "bun install" in ${directory}`)
+    step(`the dependencies of ${checkout.name} are installed`)
+    const prefix = `\u001b[90m${checkout.name.padEnd(7)}\u001b[0m │ `
+    try {
+      await install(checkout, (line) => console.log(`${prefix}${line}`))
+    } catch (error) {
+      fail(
+        `${error instanceof Error ? error.message : String(error)}: run "bun install" in ${checkout.directory}`
+      )
+    }
+    if (pending(checkout)) {
+      fail(`the dependencies of ${checkout.name} are still not installed: ${checkout.directory}`)
     }
   }
+}
+
+async function main(): Promise<void> {
+  for (const checkout of CHECKOUTS) {
+    if (!existsSync(join(checkout.directory, 'package.json'))) {
+      fail(
+        `the checkout of ${checkout.name} was not found at ${checkout.directory}: set DEV_${checkout.name.toUpperCase()}_DIR`
+      )
+    }
+  }
+  // 0. The dependencies of the machine.
+  await installDependencies()
   mkdirSync(WORK_DIR, { recursive: true })
 
   // 0. The runs of the stack that came before this one.

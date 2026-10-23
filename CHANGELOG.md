@@ -31,6 +31,11 @@ the versions follow [semantic versioning](https://semver.org).
   the fixtures of a development machine, and `bun run dev:smoke` drives
   the login of a caller and a write through the whole stack. The wiring
   is described in [`docs/development.md`](docs/development.md).
+- The **installer of the dependencies** of the development machine:
+  `bun run dev:stack` installs the dependencies of the four
+  repositories when they are not installed, and it says what it
+  installs. A checkout that has its dependencies is left alone, and
+  `DEV_SKIP_INSTALL=1` says that the machine installs nothing.
 
 ### Fixed
 

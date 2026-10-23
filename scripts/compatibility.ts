@@ -58,6 +58,7 @@ import {
   type RepositoryName,
 } from './compatibility-manifest'
 import { assertCleanCheckout, cloneAtRevision, sourceOf } from './compatibility-git'
+import { install } from './dev-dependencies'
 import { exitCodeOf } from './spawn'
 
 /** The root of the studio. */
@@ -109,17 +110,6 @@ async function waitFor(url: string, timeoutMs = 120_000): Promise<void> {
   throw new Error(`the service at ${url} did not answer`)
 }
 
-/** Installs the dependencies of a checkout. */
-function install(directory: string): void {
-  const result = spawnSync(['bun', 'install', '--frozen-lockfile'], { cwd: directory })
-  if (exitCodeOf(result) !== 0) {
-    const report = `${result.stdout?.toString() ?? ''}${result.stderr?.toString() ?? ''}`.trim()
-    throw new Error(
-      `the dependencies of ${directory} could not be installed: ${report || 'the command failed'}`
-    )
-  }
-}
-
 /**
  * Prepares the checkout of a repository of the baseline.
  *
@@ -128,7 +118,12 @@ function install(directory: string): void {
  * be the revision of the baseline and its tracked files have to be the
  * ones of the revision.
  */
-function prepare(name: RepositoryName, source: string, commit: string, workspace: string): string {
+async function prepare(
+  name: RepositoryName,
+  source: string,
+  commit: string,
+  workspace: string
+): Promise<string> {
   const prepared = process.env[`${name.toUpperCase()}_CHECKOUT`]
   if (prepared) {
     const head = spawnSync(['git', 'rev-parse', 'HEAD'], {
@@ -147,7 +142,8 @@ function prepare(name: RepositoryName, source: string, commit: string, workspace
   const directory = join(workspace, name)
   step(`the checkout of ${name} at ${commit.slice(0, 7)}`)
   cloneAtRevision(sourceOf(source, COMPAT_MIRROR), commit, directory)
-  install(directory)
+  step(`the dependencies of ${name}`)
+  await install({ name, directory }, (line) => console.log(`  ${line}`), { frozen: true })
   return directory
 }
 
@@ -200,19 +196,19 @@ async function main(): Promise<void> {
   step(`the checkouts of the run are in ${workspace}`)
 
   try {
-    const shuttle = prepare(
+    const shuttle = await prepare(
       'shuttle',
       baseline.repositories.shuttle.url,
       baseline.repositories.shuttle.commit,
       workspace
     )
-    const hub = prepare(
+    const hub = await prepare(
       'hub',
       baseline.repositories.hub.url,
       baseline.repositories.hub.commit,
       workspace
     )
-    const depot = prepare(
+    const depot = await prepare(
       'depot',
       baseline.repositories.depot.url,
       baseline.repositories.depot.commit,

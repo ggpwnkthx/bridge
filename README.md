@@ -79,6 +79,10 @@ bun install
 bun run dev:stack
 ```
 
+The runner installs the dependencies of the four repositories when they
+are not installed yet: `DEV_SKIP_INSTALL=1` says that it installs
+nothing.
+
 The studio answers at `http://localhost:8081/w/{workspaceId}`, the
 gateway at `http://localhost:8080`, the broker at `http://localhost:8082`
 and the backend at `http://localhost:8083`. The caller signs in with

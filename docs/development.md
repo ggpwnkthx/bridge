@@ -29,6 +29,25 @@ bridge/  depot/  hub/  shuttle/
 and the binaries of **PostgreSQL 15 or later** (`initdb` and `pg_ctl` in
 `/usr/lib/postgresql/15/bin` on Debian and Ubuntu).
 
+## The dependencies of the machine
+
+The four repositories of the machine hold their own dependencies. The
+runner installs the ones that are missing: `bun run dev:stack` runs the
+installer of Bun in every checkout whose dependencies are not installed,
+and it says what it installs:
+
+```
+▸ the dependencies of hub are installed
+hub    │ bun install v1.4.3 (c6da4a4d3)
+hub    │ + hono@4.13.13
+hub    │ 72 packages installed [542.00ms]
+```
+
+A checkout that has its dependencies is left alone: the install of the
+packages a developer changed is the work of that developer. The
+environment `DEV_SKIP_INSTALL=1` says that the machine installs
+nothing, and a checkout without its dependencies is then an error.
+
 ## What the runner starts
 
 | Service | Port | What it is |
@@ -66,19 +85,21 @@ of a deployment.
 
 ## What the runner prepares
 
-1. It starts PostgreSQL and it creates the roles of the backend
+1. It installs the dependencies of the four checkouts that do not have
+   them.
+2. It starts PostgreSQL and it creates the roles of the backend
    (`data_owner`, `data_runtime`, `data_registry`, `data_delivery`,
    `data_maintenance`) and the two databases (`depot` and `hub`).
-2. It applies the migrations of the backend.
-3. It starts the fixture of the identity provider of the tenant.
-4. It starts the broker, and it writes its fixtures through its
+3. It applies the migrations of the backend.
+4. It starts the fixture of the identity provider of the tenant.
+5. It starts the broker, and it writes its fixtures through its
    administration: the tenant `dev`, the principal of `alice@shuttle.test`,
    the group `editors` and the grants of the workspace on the route
    `data-api` (`content.reader`, `content.editor`, `data.audit.read`).
-5. It creates the workspace `22222222-2222-4222-8222-222222222222` in
+6. It creates the workspace `22222222-2222-4222-8222-222222222222` in
    the registry of the backend, and it registers the collections
    `articles` and `categories` for it.
-6. It starts the backend, the gateway and the studio.
+7. It starts the backend, the gateway and the studio.
 
 The runner is idempotent: the tenant is an upsert, the workspace is an
 upsert, the grants are put again. The database of a previous run is kept;
