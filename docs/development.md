@@ -27,23 +27,38 @@ bridge/  depot/  hub/  shuttle/
 ```
 
 and the binaries of **PostgreSQL 15 or later** (`initdb` and `pg_ctl` in
-`/usr/lib/postgresql/15/bin` on Debian and Ubuntu).
+`/usr/lib/postgresql/15/bin` on Debian and Ubuntu) — or nothing at all:
+the machine pulls PostgreSQL when it does not have it.
 
-The runner looks for those binaries before it starts anything, and it
-says what is missing when the machine does not have them:
+## The PostgreSQL of the machine
+
+The database of the stack is a dependency of the machine, and the
+machine has two ways to have the server of PostgreSQL:
+
+- the machine has the binaries (`/usr/lib/postgresql/<major>/bin`,
+  `/usr/local/pgsql/bin`, a keg of Homebrew, or the path of the machine
+  itself): the runner uses them;
+- the machine does not have them: the runner **pulls** them, the way a
+  developer pulls a dependency. The packages of PostgreSQL are
+  downloaded with the tool of the machine — `apt-get download` — and
+  unpacked in `.dev/postgresql` with `dpkg-deb`. **Nothing is
+  installed** on the machine, the machine needs no rights it does not
+  have, and the server of the stack runs from the directory of the
+  machine:
 
 ```
-✗ the binaries of PostgreSQL were not found: the machine needs "initdb"
-  and "pg_ctl" — install PostgreSQL 15 or later (on Debian and Ubuntu:
-  sudo apt install postgresql)
+▸ PostgreSQL is pulled into the directory of the machine
+postgres │ $ apt-get download postgresql-18 postgresql-client-18
+postgres │ Get:1 https://apt.postgresql.org/pub/repos/apt bookworm-pgdg/main amd64 postgresql-18 amd64 18.6-1.pgdg12+2 [7222 kB]
+postgres │ $ dpkg-deb -x postgresql-18_18.6-1.pgdg12+2_amd64.deb
+▸ the binaries of PostgreSQL 18 are at .dev/postgresql/postgresql-18/usr/lib/postgresql/18/bin
 ```
 
-The database of the stack is a dependency of the machine, and a
-machine without PostgreSQL gets it: the runner installs the packages of
-PostgreSQL with the package manager of the machine — `apt`, `dnf` or
-`brew` — when it can do it without asking for a password. The
-environment `DEV_SKIP_INSTALL=1` says that the runner installs
-nothing, and a machine without PostgreSQL is then an error.
+The packages are pulled once: a machine that runs the stack again uses
+the ones it has. The environment `DEV_PG_BIN` names the directory of
+the binaries when the machine has them somewhere the runner does not
+look, and `DEV_PG_PULL=1` says that the machine pulls its own
+PostgreSQL, whatever the machine has.
 
 A major of PostgreSQL that the backend of the platform does not know is
 named for it, so the machine runs the server it holds.
@@ -89,6 +104,7 @@ The state of the stack lives in `.dev` (it is ignored by git):
 | The file | What it holds |
 | --- | --- |
 | `.dev/pg` | The data of PostgreSQL. |
+| `.dev/postgresql` | The PostgreSQL that the machine pulled for itself: the packages of PostgreSQL, unpacked. |
 | `.dev/routes.json` | The route table of the gateway: the route of the data, `/ws/{workspaceId}/` → the backend. |
 | `.dev/bindings.json` | The trusted route bindings of the backend: the route of the gateway, with the file of the public key of the identity. |
 | `.dev/identity-key.pem` | The private key with which the gateway signs the identity of a request. |

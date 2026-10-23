@@ -62,8 +62,11 @@ import {
   type Binaries,
   directories as postgresDirectories,
   find as findPostgres,
-  install as installPostgres,
   isKnown as isKnownMajor,
+  named as namedPostgres,
+  pull as pullPostgres,
+  start as startPostgres,
+  type StartedPostgres,
 } from './dev-postgres'
 
 // ---------------------------------------------------------------------------
@@ -78,6 +81,8 @@ const WORK_DIR = resolve(process.env.DEV_WORK_DIR ?? join(BRIDGE_DIR, '.dev'))
 const PROCESS_DIR = join(WORK_DIR, 'processes')
 /** The directory of the data of the database of the stack. */
 const PG_DIR = resolve(process.env.DEV_PG_DIR ?? join(WORK_DIR, 'pg'))
+/** The directory of the PostgreSQL that the machine pulls for itself. */
+const PG_BIN_DIR = resolve(process.env.DEV_PG_BIN_DIR ?? join(WORK_DIR, 'postgresql'))
 
 /** The checkout of the gateway. */
 const SHUTTLE_DIR = resolve(process.env.DEV_SHUTTLE_DIR ?? join(BRIDGE_DIR, '..', 'shuttle'))
@@ -272,13 +277,11 @@ async function stopPreviousRun(): Promise<void> {
  * group of the runner, so it survives the death of the run that started
  * it and holds the port and the data directory of the stack.
  */
-async function stopPreviousDatabase(): Promise<void> {
+async function stopPreviousDatabase(binaries: string): Promise<void> {
   if (!existsSync(join(PG_DIR, 'PG_VERSION'))) return
-  const { binaries } = (await import(
-    pathToFileURL(join(DEPOT_DIR, 'scripts', 'postgres.ts')).href
-  )) as { binaries: () => string }
-  const result = spawnSync(join(binaries(), 'pg_ctl'), ['-D', PG_DIR, '-m', 'fast', 'stop'], {
+  const result = spawnSync(join(binaries, 'pg_ctl'), ['-D', PG_DIR, '-m', 'fast', 'stop'], {
     encoding: 'utf8',
+    env: { ...process.env, LANG: 'C', LC_ALL: 'C' },
   })
   const report = `${result.stdout}${result.stderr}`
   if (exitCodeOf(result) !== 0 && !/is server running/i.test(report)) {
@@ -613,18 +616,30 @@ async function admin(
  * the scripts of its own checkout, and those scripts look for the
  * binaries of PostgreSQL in the directories of the machine. The studio
  * looks for them first: a machine without them cannot run the stack,
- * and the message of the machine says what is missing and how it is
- * installed.
+ * and the message of the machine says what is missing.
  *
  * A major that the backend of the platform does not know is named with
  * the environment `POSTGRES_MAJOR`: the backend looks for the binaries
  * of the major of the machine.
  *
- * A machine without PostgreSQL gets it: the database of the stack is
- * a dependency of the machine, and the machine installs it when it can
- * do it without asking for a password.
+ * A machine without PostgreSQL **pulls** it: the packages of PostgreSQL
+ * are downloaded and unpacked in the directory of the machine, and the
+ * server of the stack runs from there. Nothing is installed on the
+ * machine, and the machine needs no rights it does not have.
  */
 async function checkPostgres(): Promise<Binaries> {
+  // The machine names the directory of the binaries: that one, or an
+  // error. The name is a direction, not a guess.
+  const named = namedPostgres()
+  if (named) {
+    const binaries = findPostgres()
+    if (!binaries || binaries.directory !== named.directory) {
+      fail(
+        `the binaries of PostgreSQL were not found in ${named.directory}: the directory needs "initdb" and "pg_ctl"`
+      )
+    }
+    return binaries
+  }
   const binaries = findPostgres()
   if (binaries) {
     if (binaries.major !== null && !isKnownMajor(binaries.major)) {
@@ -634,25 +649,25 @@ async function checkPostgres(): Promise<Binaries> {
     return binaries
   }
   // The machine has no PostgreSQL: the database of the stack is a
-  // dependency of the machine, and the machine installs it when it can
-  // do it without asking for a password.
+  // dependency of the machine, and the machine pulls it.
   if (process.env.DEV_SKIP_INSTALL === '1') {
     fail(
-      `the binaries of PostgreSQL were not found and the install is skipped: install PostgreSQL 15 or later (on Debian and Ubuntu: sudo apt install postgresql)`
+      `the binaries of PostgreSQL were not found and the pull is skipped: name the directory of the binaries with DEV_PG_BIN, or install PostgreSQL 15 or later on the machine`
     )
   }
-  step('the binaries of PostgreSQL are installed')
+  step('PostgreSQL is pulled into the directory of the machine')
   const prefix = '\u001b[90mpostgres\u001b[0m │ '
-  const installed = await installPostgres((line) => console.log(`${prefix}${line}`))
-  if (!installed) {
+  const pulled = await pullPostgres(PG_BIN_DIR, (line) => console.log(`${prefix}${line}`))
+  if (!pulled) {
     fail(
-      `the binaries of PostgreSQL were not found and they could not be installed: the machine needs "initdb" and "pg_ctl" — install PostgreSQL 15 or later (on Debian and Ubuntu: sudo apt install postgresql) — the directories that were looked for: ${postgresDirectories().slice(0, 6).join(', ')}`
+      `the binaries of PostgreSQL were not found and they could not be pulled: the machine needs "initdb" and "pg_ctl" — name the directory of the binaries with DEV_PG_BIN, or install PostgreSQL 15 or later on the machine — the directories that were looked for: ${postgresDirectories().slice(0, 6).join(', ')}`
     )
   }
-  if (installed.major !== null && !isKnownMajor(installed.major)) {
-    process.env.POSTGRES_MAJOR = String(installed.major)
+  if (pulled.major !== null && !isKnownMajor(pulled.major)) {
+    process.env.POSTGRES_MAJOR = String(pulled.major)
   }
-  return installed
+  step(`the binaries of PostgreSQL ${pulled.major} are at ${pulled.directory}`)
+  return pulled
 }
 
 /**
@@ -714,7 +729,7 @@ async function main(): Promise<void> {
 
   // 0.2 The runs of the stack that came before this one.
   await stopPreviousRun()
-  await stopPreviousDatabase()
+  await stopPreviousDatabase(binaries.directory)
   registry.register(process.pid, 'stack')
 
   // 0.3 The ports of the stack.
@@ -731,13 +746,13 @@ async function main(): Promise<void> {
 
   // 1. The database.
   step('the database')
-  const { startPostgres } = await import(
-    pathToFileURL(join(DEPOT_DIR, 'scripts', 'postgres.ts')).href
-  )
-  let postgres: Awaited<ReturnType<typeof startPostgres>>
+  const socketDirectory = join(WORK_DIR, 'socket')
+  let postgres: StartedPostgres
   try {
     postgres = await startPostgres({
+      binaries: binaries.directory,
       dataDir: PG_DIR,
+      socketDir: socketDirectory,
       port: PORTS.postgres,
       user: 'depot',
       password: 'depot',
@@ -758,7 +773,6 @@ async function main(): Promise<void> {
     const pid = Number(readFileSync(postmaster, 'utf8').split('\n')[0])
     if (Number.isInteger(pid)) registry.register(pid, 'postgres')
   }
-  const socketDirectory = join(WORK_DIR, 'socket')
   const socketUrl = `postgres://depot@localhost/postgres?host=${encodeURIComponent(socketDirectory)}&port=${postgres.port}`
   SOCKET_URL = socketUrl
 

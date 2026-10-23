@@ -37,10 +37,13 @@ the versions follow [semantic versioning](https://semver.org).
   installs. A checkout that has its dependencies is left alone, and
   `DEV_SKIP_INSTALL=1` says that the machine installs nothing.
 - The **PostgreSQL of the development machine** is a dependency of the
-  machine: the runner installs the packages of PostgreSQL with the
-  package manager of the machine — `apt`, `dnf` or `brew` — when the
-  machine does not have the binaries and it can install them without
-  asking for a password.
+  machine: a machine without the binaries of PostgreSQL **pulls** them,
+  the way a developer pulls a dependency — the packages of PostgreSQL
+  are downloaded with `apt-get download` and unpacked with `dpkg-deb` in
+  `.dev/postgresql`, and the server of the stack runs from there.
+  Nothing is installed on the machine, and the machine needs no rights
+  it does not have. The environment `DEV_PG_BIN` names the directory of
+  the binaries when the machine has them somewhere else.
 
 ### Fixed
 

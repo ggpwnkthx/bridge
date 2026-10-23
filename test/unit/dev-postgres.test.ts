@@ -3,7 +3,7 @@
  */
 
 import { describe, expect, test } from 'bun:test'
-import { directories, isKnown, majorOf } from '../../scripts/dev-postgres'
+import { directories, isKnown, majorOf, named } from '../../scripts/dev-postgres'
 
 describe('the directories of the binaries of PostgreSQL', () => {
   test('they hold the majors of the machine, the newest first', () => {
@@ -31,6 +31,19 @@ describe('the major of a directory of binaries', () => {
 
   test('it is not guessed when the directory does not name one', () => {
     expect(majorOf('/usr/local/pgsql/bin')).toBeNull()
+  })
+})
+
+describe('the binaries that the machine names', () => {
+  test('the environment that names them is a direction, not a guess', () => {
+    expect(named()).toBeUndefined()
+    process.env.DEV_PG_BIN = '/opt/postgresql/18/bin'
+    try {
+      expect(named()?.directory).toBe('/opt/postgresql/18/bin')
+      expect(named()?.major).toBe(18)
+    } finally {
+      delete process.env.DEV_PG_BIN
+    }
   })
 })
 
