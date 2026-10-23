@@ -52,11 +52,13 @@ The state of the stack lives in `.dev` (it is ignored by git):
 | --- | --- |
 | `.dev/pg` | The data of PostgreSQL. |
 | `.dev/routes.json` | The route table of the gateway: the route of the data, `/ws/{workspaceId}/` → the backend. |
-| `.dev/bindings.json` | The trusted route bindings of the backend: the route of the gateway, with the file of the key of the identity. |
-| `.dev/identity.key` | The derived key of the signature of the gateway, in base64. |
+| `.dev/bindings.json` | The trusted route bindings of the backend: the route of the gateway, with the file of the public key of the identity. |
+| `.dev/identity-key.pem` | The private key with which the gateway signs the identity of a request. |
+| `.dev/identity.key` | The public key of the identity of the gateway, in pem: the backend verifies with it. |
 | `.dev/hub-signing-key.pem` | The private key with which the broker signs its tokens. |
 | `.dev/cursor.key` | The key with which the backend signs its cursors. |
 | `.dev/hub-context.token` | The read only credential of the access context contract. |
+| `.dev/processes` | The registry of the processes of the runs of the stack: every run writes the processes it spawns, and every run kills the processes of the runs that came before it. |
 
 The secrets of the development machine are the fixtures of
 [`scripts/dev-stack.ts`](../scripts/dev-stack.ts). They are not secrets
@@ -81,6 +83,45 @@ of a deployment.
 The runner is idempotent: the tenant is an upsert, the workspace is an
 upsert, the grants are put again. The database of a previous run is kept;
 `DEV_FRESH=1 bun run dev:stack` drops it and starts from nothing.
+
+## The drift of the schema
+
+The schema of a service is the sum of the migrations of its checkout. A
+migration that was renamed or changed after it was applied leaves the
+database of a previous run behind the service, and the service refuses
+to start against a schema it does not understand.
+
+The runner repairs that drift before it starts the services:
+
+- a migration of the broker that the checkout does not know, or a
+  migration of the backend whose content changed, builds the database
+  of the service again;
+- the tenant of the broker is created with the database of the broker:
+  when that database is built again, the tenant has another identifier,
+  and the backend, which holds the reference of the tenant, is built
+  again with it.
+
+The runner says what it repaired. A development machine holds nothing
+that a manual repair would save.
+
+## The runs of the stack
+
+A development machine holds one stack. `bun run dev:stack` stops the
+stack that is already there before it starts its own: the run that is
+alive is asked to leave, the services that outlive it — a service that
+ignored the signal, the database of a run that was killed — are killed,
+and the ports of the stack are free for the new run.
+
+The runner keeps the registry of its processes in `.dev/processes`, one
+file per process, with the run that spawned it. A run reads the
+registry, stops the runs that came before it, and writes its own entry
+for every service it starts. The registry is also a safety net for the
+runs that died without their children: a service of the stack that
+holds one of its ports is stopped even when the registry was erased.
+
+A process that is not a service of the stack is never touched: the
+runner kills the runs of `dev:stack` and the services they started,
+and nothing else.
 
 ## The smoke test
 

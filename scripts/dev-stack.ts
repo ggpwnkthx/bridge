@@ -32,9 +32,21 @@
 import { spawn, type Subprocess } from 'bun'
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join, resolve } from 'node:path'
-import { createHmac, generateKeyPairSync } from 'node:crypto'
+import { generateKeyPairSync } from 'node:crypto'
+import { spawnSync } from 'node:child_process'
 import { createServer } from 'node:net'
 import { pathToFileURL } from 'node:url'
+import {
+  alive,
+  commandOf,
+  cwdOf,
+  listeners,
+  ProcessRegistry,
+  runners,
+  signal,
+  tree,
+} from './dev-processes'
+import { drift, type Migrations, readMigrations } from './dev-schema'
 
 // ---------------------------------------------------------------------------
 // The layout
@@ -44,6 +56,10 @@ import { pathToFileURL } from 'node:url'
 const BRIDGE_DIR = resolve(import.meta.dir, '..')
 /** The directory of the state of the stack. */
 const WORK_DIR = join(BRIDGE_DIR, '.dev')
+/** The directory of the registry of the processes of the runs of the stack. */
+const PROCESS_DIR = join(WORK_DIR, 'processes')
+/** The directory of the data of the database of the stack. */
+const PG_DIR = join(WORK_DIR, 'pg')
 
 /** The checkout of the gateway. */
 const SHUTTLE_DIR = resolve(process.env.DEV_SHUTTLE_DIR ?? join(BRIDGE_DIR, '..', 'shuttle'))
@@ -122,6 +138,9 @@ const stoppers: (() => void | Promise<void>)[] = []
 /** The server of the database. */
 let stopPostgres: (() => void) | undefined
 
+/** The registry of the processes of the runs of the stack. */
+const registry = new ProcessRegistry(PROCESS_DIR)
+
 /** A stream of bytes that can be read with `for await`. */
 type ByteStream = ReadableStream<Uint8Array> & {
   [Symbol.asyncIterator](): AsyncIterator<Uint8Array>
@@ -130,7 +149,7 @@ type ByteStream = ReadableStream<Uint8Array> & {
 /** The client of the database of the development machine. */
 interface DatabaseClient {
   connect(): Promise<void>
-  query(sql: string, values?: unknown[]): Promise<{ rowCount: number | null }>
+  query(sql: string, values?: unknown[]): Promise<{ rowCount: number | null; rows?: unknown[] }>
   end(): Promise<void>
 }
 
@@ -160,17 +179,129 @@ async function waitFor(url: string, timeoutMs = 60_000): Promise<void> {
   throw new Error(`the service at ${url} did not answer`)
 }
 
-/** Reports that a port of the stack is already taken. */
-async function checkPort(port: number, name: string): Promise<void> {
-  const free = await new Promise<boolean>((done) => {
+/** Waits for a moment. */
+async function delay(ms: number): Promise<void> {
+  await new Promise((resolve) => setTimeout(resolve, ms))
+}
+
+/** Waits for a condition to hold, and tells whether it held in time. */
+async function until(condition: () => boolean, timeoutMs: number): Promise<boolean> {
+  const deadline = Date.now() + timeoutMs
+  while (Date.now() < deadline) {
+    if (condition()) return true
+    await new Promise((resolve) => setTimeout(resolve, 100))
+  }
+  return condition()
+}
+
+/**
+ * Kills the processes of the runs of the stack that came before this one.
+ *
+ * A run that is still alive is asked to leave, the way a stack is
+ * stopped with a signal: it kills its own services. The processes that
+ * outlive it — a service that ignored the signal, the database of a run
+ * that was killed — are killed here.
+ */
+async function stopPreviousRun(): Promise<void> {
+  const previous = registry.foreign()
+  // The runs of the stack that are alive without a registry behind them:
+  // a run that started before the registry, or one whose registry was
+  // erased, is stopped here too.
+  const orphans = runners('dev-stack.ts', BRIDGE_DIR).filter((pid) => pid !== process.pid)
+  if (previous.length === 0 && orphans.length === 0) {
+    step('no previous run of the stack')
+    return
+  }
+  step('the previous run of the stack is stopped')
+
+  const masters = [
+    ...previous.filter((entry) => entry.role === 'stack').map((entry) => entry.pid),
+    ...orphans,
+  ]
+  for (const master of masters) signal([master], 'SIGTERM')
+  if (masters.length > 0) {
+    await until(() => masters.every((master) => !alive(master)), 5_000)
+    for (const master of masters) {
+      if (alive(master)) signal([master], 'SIGKILL')
+    }
+  }
+
+  const services = previous.filter((entry) => entry.role !== 'stack' && alive(entry.pid))
+  if (services.length > 0) {
+    signal(tree(services.map((entry) => entry.pid)), 'SIGTERM')
+    await until(() => services.every((entry) => !alive(entry.pid)), 3_000)
+    const survivors = services.filter((entry) => alive(entry.pid))
+    if (survivors.length > 0) signal(tree(survivors.map((entry) => entry.pid)), 'SIGKILL')
+  }
+}
+
+/**
+ * Stops the database of a previous run.
+ *
+ * The server of PostgreSQL is started by `pg_ctl`: it leaves the process
+ * group of the runner, so it survives the death of the run that started
+ * it and holds the port and the data directory of the stack.
+ */
+async function stopPreviousDatabase(): Promise<void> {
+  if (!existsSync(join(PG_DIR, 'PG_VERSION'))) return
+  const { binaries } = (await import(
+    pathToFileURL(join(DEPOT_DIR, 'scripts', 'postgres.ts')).href
+  )) as { binaries: () => string }
+  const result = spawnSync(join(binaries(), 'pg_ctl'), ['-D', PG_DIR, '-m', 'fast', 'stop'], {
+    encoding: 'utf8',
+  })
+  const report = `${result.stdout}${result.stderr}`
+  if (result.status !== 0 && !/is server running/i.test(report)) {
+    step(`the database of the previous run is left as it is: ${result.stderr.trim()}`)
+  }
+}
+
+/** Tells whether a port is free. */
+async function isFree(port: number): Promise<boolean> {
+  return await new Promise<boolean>((done) => {
     const server = createServer()
     server.once('error', () => done(false))
     server.once('listening', () => server.close(() => done(true)))
     server.listen(port, '127.0.0.1')
   })
-  if (!free) {
-    fail(`the port ${port} of ${name} is already taken: stop the service that holds it`)
+}
+
+/**
+ * Tells whether a process is a service of the stack.
+ *
+ * A service of the stack works in the checkout of one of the four
+ * repositories, or it is the database of the stack, in the directory of
+ * its data. A process that holds the port of the stack and is none of
+ * them belongs to somebody else: it is not killed.
+ */
+function isServiceOfStack(pid: number): boolean {
+  const command = commandOf(pid) ?? ''
+  if (command.includes(PG_DIR)) return true
+  const directory = cwdOf(pid)
+  if (!directory) return false
+  const checkouts = [BRIDGE_DIR, HUB_DIR, DEPOT_DIR, SHUTTLE_DIR]
+  if (!checkouts.includes(directory)) return false
+  return command.includes('src/main.ts') || command.includes('dev-stack.ts')
+}
+
+/** Reports that a port of the stack is already taken. */
+async function checkPort(port: number, name: string): Promise<void> {
+  if (await isFree(port)) return
+
+  // The port is held by a service of a previous run of the stack that
+  // did not leave its registry behind: it is stopped here.
+  const holders = listeners(port).filter((pid) => isServiceOfStack(pid))
+  if (holders.length > 0) {
+    step(`the service of a previous run that holds the port ${port} is stopped`)
+    signal(tree(holders), 'SIGTERM')
+    await until(() => holders.every((pid) => !alive(pid)), 3_000)
+    const survivors = holders.filter((pid) => alive(pid))
+    if (survivors.length > 0) signal(tree(survivors), 'SIGKILL')
+    await delay(300)
+    if (await isFree(port)) return
   }
+
+  fail(`the port ${port} of ${name} is already taken: stop the service that holds it`)
 }
 
 /** Starts a service of the stack and streams its logs. */
@@ -206,6 +337,7 @@ function start(
     }
   })
   children.push(child)
+  registry.register(child.pid, name)
   return child
 }
 
@@ -235,6 +367,187 @@ async function run(cwd: string, command: string[], env: Record<string, string>):
   const code = await child.exited
   if (code !== 0) {
     throw new Error(`the command "${command.join(' ')}" failed: ${logs.slice(-20).join('\n')}`)
+  }
+}
+
+// ---------------------------------------------------------------------------
+// The schema of the databases of a previous run
+// ---------------------------------------------------------------------------
+
+/** The constructor of the clients of the database of the stack. */
+let clientOf: ((connectionString: string) => DatabaseClient) | undefined
+
+/** The url of the database of the stack, without the name of the database. */
+let DATABASE_URL = ''
+
+/** The url of the cluster of the database of the stack. */
+let SOCKET_URL = ''
+
+/** The directory of the migrations of the schema of the broker. */
+const HUB_MIGRATIONS_DIR = join(HUB_DIR, 'src', 'platform', 'postgres', 'migrations')
+
+/** The directory of the migrations of the schema of the backend. */
+const DEPOT_MIGRATIONS_DIR = resolve(DEPOT_DIR, process.env.DATA_MIGRATIONS_DIR ?? 'migrations')
+
+/**
+ * The migrations that the database of a service holds and that its
+ * checkout does not know, or knows with another content.
+ *
+ * A migration that was renamed after it was applied leaves the database
+ * with a migration that the service does not know: the service refuses
+ * to start, because it does not know what it would find in the tables.
+ * A migration that was changed after it was applied is a drift of the
+ * same kind.
+ */
+async function driftOf(options: {
+  /** The database of the service. */
+  database: string
+  /** The table that holds the migrations that were applied. */
+  table: string
+  /** The column that holds the name of the migration. */
+  column: string
+  /** The column that holds the digest of the migration, when there is one. */
+  digest?: string
+  /** The migrations of the checkout of the service. */
+  known: Migrations
+}): Promise<string[]> {
+  if (!clientOf) return []
+  const client = clientOf(`${DATABASE_URL}/${options.database}`)
+  try {
+    await client.connect()
+    const table = await client.query(`select to_regclass($1) as table`, [options.table])
+    if (!table.rows?.[0] || (table.rows[0] as { table: string | null }).table === null) return []
+    const columns = [options.column, ...(options.digest ? [options.digest] : [])]
+    const result = await client.query(
+      `select ${columns.join(', ')} from ${options.table} order by ${options.column}`
+    )
+    const applied: Migrations = new Map()
+    for (const row of result.rows ?? []) {
+      const record = row as Record<string, unknown>
+      applied.set(
+        String(record[options.column]),
+        options.digest ? (record[options.digest] as string | undefined) : undefined
+      )
+    }
+    return drift(applied, options.known)
+  } catch {
+    // A database that cannot be read has no drift to repair: the service
+    // starts, and it says what it cannot do.
+    return []
+  } finally {
+    await client.end().catch(() => undefined)
+  }
+}
+
+/**
+ * Runs something with a client of the cluster of the database.
+ *
+ * The client is the owner of the cluster: it creates the databases and
+ * it drops them.
+ */
+async function withAdmin<T>(action: (admin: DatabaseClient) => Promise<T>): Promise<T> {
+  if (!clientOf) throw new Error('the database of the stack is not started')
+  const admin = clientOf(SOCKET_URL)
+  await admin.connect()
+  try {
+    return await action(admin)
+  } finally {
+    await admin.end().catch(() => undefined)
+  }
+}
+
+/**
+ * Builds the database of a service again.
+ *
+ * A development machine holds nothing that a manual repair would save:
+ * the database of the service is dropped, and the migrations of the
+ * checkout are applied to it by the service itself.
+ */
+async function rebuildDatabase(database: string, owner: string): Promise<void> {
+  await withAdmin(async (admin) => {
+    await admin.query(`drop database if exists ${database}`)
+    await admin.query(`create database ${database} owner ${owner}`)
+  })
+}
+
+/**
+ * Repairs the drift of the schemas of the databases of a previous run.
+ *
+ * The schema of a service is the sum of the migrations of its checkout.
+ * A migration that was renamed or changed after it was applied leaves
+ * the database behind the service, and the service refuses to start
+ * against a schema it does not understand. The database of the service
+ * is built again, and the migrations of the checkout are applied to it.
+ */
+async function repairDrift(): Promise<void> {
+  const depot = await driftOf({
+    database: 'depot',
+    table: 'platform.schema_migrations',
+    column: 'id',
+    digest: 'checksum',
+    known: readMigrations(DEPOT_MIGRATIONS_DIR, true),
+  })
+  const hub = await driftOf({
+    database: 'hub',
+    table: 'hub_schema_migrations',
+    column: 'name',
+    known: readMigrations(HUB_MIGRATIONS_DIR, false),
+  })
+  if (depot.length > 0) {
+    step(
+      `the schema of the backend drifted: ${depot.join(', ')} — the database of the backend is built again`
+    )
+    await rebuildDatabase('depot', 'data_owner')
+  }
+  if (hub.length > 0) {
+    step(
+      `the schema of the broker drifted: ${hub.join(', ')} — the database of the broker is built again`
+    )
+    await rebuildDatabase('hub', 'depot')
+    // The tenant of the broker is created with the database of the
+    // broker, and it has another identifier: the backend, which holds
+    // the reference of the tenant, is built again with it.
+    step(
+      'the database of the backend is built again: it holds the reference of the tenant of the broker'
+    )
+    await rebuildDatabase('depot', 'data_owner')
+  }
+}
+
+/**
+ * Tells whether the backend holds the workspace of another tenant.
+ *
+ * The tenant of the broker is created with the database of the broker:
+ * when the database of the broker is built again, the tenant has another
+ * identifier, and the reference of the tenant in the backend is a
+ * reference to a tenant that does not exist. The rows of the workspace
+ * keep the reference, and the fixture of the workspace cannot be put
+ * again.
+ */
+async function holdsAnotherTenant(options: {
+  /** The database of the backend. */
+  database: string
+  /** The identifier of the workspace of the development machine. */
+  workspace: string
+  /** The identifier of the tenant of the broker. */
+  tenant: string
+}): Promise<boolean> {
+  if (!clientOf) return false
+  const client = clientOf(`${DATABASE_URL}/${options.database}`)
+  try {
+    await client.connect()
+    const result = await client.query(
+      'select tenant_id from platform.workspaces where id = $1::uuid',
+      [options.workspace]
+    )
+    const row = result.rows?.[0] as { tenant_id?: string } | undefined
+    if (!row?.tenant_id) return false
+    return row.tenant_id !== options.tenant
+  } catch {
+    // A backend without its registry has no reference to drift.
+    return false
+  } finally {
+    await client.end().catch(() => undefined)
   }
 }
 
@@ -280,7 +593,12 @@ async function main(): Promise<void> {
   }
   mkdirSync(WORK_DIR, { recursive: true })
 
-  // 0. The ports of the stack.
+  // 0. The runs of the stack that came before this one.
+  await stopPreviousRun()
+  await stopPreviousDatabase()
+  registry.register(process.pid, 'stack')
+
+  // 0.1 The ports of the stack.
   for (const [port, name] of [
     [PORTS.postgres, 'the database'],
     [PORTS.idp, 'the identity provider'],
@@ -298,15 +616,21 @@ async function main(): Promise<void> {
     pathToFileURL(join(DEPOT_DIR, 'scripts', 'postgres.ts')).href
   )
   const postgres = await startPostgres({
-    dataDir: join(WORK_DIR, 'pg'),
+    dataDir: PG_DIR,
     port: PORTS.postgres,
     user: 'depot',
     password: 'depot',
     fresh: process.env.DEV_FRESH === '1',
   })
   stopPostgres = postgres.stop
+  const postmaster = join(PG_DIR, 'postmaster.pid')
+  if (existsSync(postmaster)) {
+    const pid = Number(readFileSync(postmaster, 'utf8').split('\n')[0])
+    if (Number.isInteger(pid)) registry.register(pid, 'postgres')
+  }
   const socketDirectory = join(WORK_DIR, 'socket')
   const socketUrl = `postgres://depot@localhost/postgres?host=${encodeURIComponent(socketDirectory)}&port=${postgres.port}`
+  SOCKET_URL = socketUrl
 
   const pgModule = (await import(
     pathToFileURL(join(DEPOT_DIR, 'node_modules', 'pg', 'lib', 'index.js')).href
@@ -318,6 +642,8 @@ async function main(): Promise<void> {
     })
   const admin_ = new pg.Client({ connectionString: socketUrl })
   await admin_.connect()
+  clientOf = (connectionString: string) => new pg.Client({ connectionString })
+  DATABASE_URL = `postgres://depot:depot@127.0.0.1:${postgres.port}`
   await admin_.query("alter role depot with password 'depot'")
   for (const [role, password] of Object.entries(ROLE_PASSWORDS)) {
     await admin_.query(
@@ -337,8 +663,11 @@ async function main(): Promise<void> {
       await admin_.query(`create database ${database} owner ${owner}`)
     }
   }
+  // 1.1 The drift of the schemas of the databases of a previous run.
+  await repairDrift()
+
   await admin_.end()
-  const base = `postgres://depot:depot@127.0.0.1:${postgres.port}`
+  const base = DATABASE_URL
   const ownerUrl = `postgres://data_owner:${ROLE_PASSWORDS.data_owner}@127.0.0.1:${postgres.port}/depot`
   const runtimeUrl = `postgres://data_runtime:${ROLE_PASSWORDS.data_runtime}@127.0.0.1:${postgres.port}/depot`
   const registryUrl = `postgres://data_registry:${ROLE_PASSWORDS.data_registry}@127.0.0.1:${postgres.port}/depot`
@@ -462,6 +791,18 @@ async function main(): Promise<void> {
 
   // 6. The registry of the backend: the workspace and its collections.
   step('the workspace of the backend')
+  if (await holdsAnotherTenant({ database: 'depot', workspace: WORKSPACE_ID, tenant: tenantId })) {
+    // The tenant of the broker has another identifier than the one the
+    // backend holds: the reference of the tenant in the backend drifted,
+    // and the fixture of the workspace cannot be put again.
+    step(
+      'the reference of the tenant of the broker drifted in the backend — the database of the backend is built again'
+    )
+    await rebuildDatabase('depot', 'data_owner')
+    await run(DEPOT_DIR, ['bun', 'run', 'scripts/migrate.ts'], {
+      DATA_OWNER_DATABASE_URL: ownerUrl,
+    })
+  }
   await run(
     DEPOT_DIR,
     [
@@ -501,12 +842,29 @@ async function main(): Promise<void> {
 
   // 7. The backend.
   step('the backend (Depot)')
-  const identityKey = createHmac('sha256', SESSION_SECRET)
-    .update('shuttle-identity-signature-v1')
-    .digest()
-  const identityKeyBase64 = identityKey.toString('base64')
-  const identityKeyFile = join(WORK_DIR, 'identity.key')
-  writeFileSync(identityKeyFile, identityKeyBase64)
+  // The gateway signs the identity of a request with the private key of
+  // the deployment, and the backend verifies it with the public one. The
+  // key of the development machine is in the directory of the stack: it
+  // is the same on every run.
+  const identityKeyFile = join(WORK_DIR, 'identity-key.pem')
+  const identityPublicKeyFile = join(WORK_DIR, 'identity.key')
+  // The key of a previous run is kept, so the identity of the machine is
+  // the same on every run. A file that does not hold a key of the
+  // machine — the derived secret of an earlier release — is replaced.
+  const identityKeysAreThere =
+    existsSync(identityKeyFile) &&
+    existsSync(identityPublicKeyFile) &&
+    readFileSync(identityKeyFile, 'utf8').includes('PRIVATE KEY') &&
+    readFileSync(identityPublicKeyFile, 'utf8').includes('PUBLIC KEY')
+  if (!identityKeysAreThere) {
+    const { privateKey, publicKey } = generateKeyPairSync('ec', { namedCurve: 'prime256v1' })
+    writeFileSync(identityKeyFile, privateKey.export({ type: 'pkcs8', format: 'pem' }).toString())
+    writeFileSync(
+      identityPublicKeyFile,
+      publicKey.export({ type: 'spki', format: 'pem' }).toString()
+    )
+  }
+  const identityKey = readFileSync(identityKeyFile, 'utf8')
   const cursorKeyFile = join(WORK_DIR, 'cursor.key')
   writeFileSync(cursorKeyFile, 'the-cursor-key-of-the-development-machine-0001')
   const contextTokenFile = join(WORK_DIR, 'hub-context.token')
@@ -516,14 +874,18 @@ async function main(): Promise<void> {
     bindingsFile,
     JSON.stringify(
       {
-        version: 1,
+        version: 2,
         bindings: [
           {
             id: ROUTE_ID,
             host: `localhost:${PORTS.shuttle}`,
             upstreamPathPattern: '/ws/{workspaceId}/v1/*',
             routeId: ROUTE_ID,
-            identityKeyFile,
+            identity: {
+              version: 'v5',
+              algorithm: 'ES256',
+              publicKeyFile: identityPublicKeyFile,
+            },
           },
         ],
       },
@@ -586,6 +948,10 @@ async function main(): Promise<void> {
       SHUTTLE_CONFIG: routesFile,
       SHUTTLE_GATEWAY_HOST: '127.0.0.1',
       SHUTTLE_GATEWAY_PORT: String(PORTS.shuttle),
+      // The gateway signs the identity of the requests it forwards with
+      // the private key of the machine; the backend verifies it with the
+      // public one, in the file of the bindings.
+      SHUTTLE_IDENTITY_SIGNING_KEY: identityKey,
       SHUTTLE_OIDC_ISSUER: URLS.hub,
       SHUTTLE_OIDC_CLIENT_ID: HUB_CLIENT_ID,
       SHUTTLE_OIDC_CLIENT_SECRET: HUB_CLIENT_SECRET,
@@ -647,8 +1013,17 @@ async function main(): Promise<void> {
   console.log('')
 }
 
+/** Tells whether the stack is already stopping. */
+let stopping = false
+
 /** Stops the stack. */
 async function stop(): Promise<void> {
+  if (stopping) return
+  stopping = true
+  const pids = children.map((child) => child.pid)
+  // The tree is taken before the first kill: a watcher that dies
+  // leaves its child behind, and the child would be lost.
+  const descendants = tree(pids)
   for (const child of children.reverse()) {
     try {
       child.kill()
@@ -656,6 +1031,11 @@ async function stop(): Promise<void> {
       // The process is already gone.
     }
   }
+  // The services that watch their sources hold a child of their own.
+  signal(descendants, 'SIGTERM')
+  await until(() => pids.every((pid) => !alive(pid)), 3_000)
+  const survivors = descendants.filter((pid) => alive(pid))
+  if (survivors.length > 0) signal(tree(survivors), 'SIGKILL')
   for (const stopper of stoppers.reverse()) {
     try {
       await stopper()
@@ -664,6 +1044,7 @@ async function stop(): Promise<void> {
     }
   }
   stopPostgres?.()
+  registry.release()
   process.exit(0)
 }
 
