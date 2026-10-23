@@ -58,6 +58,12 @@ import {
 import { exitCodeOf } from './spawn'
 import { drift, type Migrations, readMigrations } from './dev-schema'
 import { install, type Checkout, pending } from './dev-dependencies'
+import {
+  type Binaries,
+  directories as postgresDirectories,
+  find as findPostgres,
+  isKnown as isKnownMajor,
+} from './dev-postgres'
 
 // ---------------------------------------------------------------------------
 // The layout
@@ -600,6 +606,34 @@ async function admin(
 // ---------------------------------------------------------------------------
 
 /**
+ * Checks the binaries of PostgreSQL of the machine.
+ *
+ * The backend of the platform starts the server of the database with
+ * the scripts of its own checkout, and those scripts look for the
+ * binaries of PostgreSQL in the directories of the machine. The studio
+ * looks for them first: a machine without them cannot run the stack,
+ * and the message of the machine says what is missing and how it is
+ * installed.
+ *
+ * A major that the backend of the platform does not know is named with
+ * the environment `POSTGRES_MAJOR`: the backend looks for the binaries
+ * of the major of the machine.
+ */
+function checkPostgres(): Binaries {
+  const binaries = findPostgres()
+  if (!binaries) {
+    fail(
+      `the binaries of PostgreSQL were not found: the machine needs "initdb" and "pg_ctl" — install PostgreSQL 15 or later (on Debian and Ubuntu: apt install postgresql) — the directories that were looked for: ${postgresDirectories().slice(0, 6).join(', ')}`
+    )
+  }
+  if (binaries.major !== null && !isKnownMajor(binaries.major)) {
+    process.env.POSTGRES_MAJOR = String(binaries.major)
+    step(`the binaries of PostgreSQL ${binaries.major} are at ${binaries.directory}`)
+  }
+  return binaries
+}
+
+/**
  * Installs the dependencies of the checkouts of the stack.
  *
  * A checkout whose dependencies are not installed cannot run, and the
@@ -653,12 +687,15 @@ async function main(): Promise<void> {
   await installDependencies()
   mkdirSync(WORK_DIR, { recursive: true })
 
-  // 0. The runs of the stack that came before this one.
+  // 0.1 The binaries of PostgreSQL of the machine.
+  const binaries = checkPostgres()
+
+  // 0.2 The runs of the stack that came before this one.
   await stopPreviousRun()
   await stopPreviousDatabase()
   registry.register(process.pid, 'stack')
 
-  // 0.1 The ports of the stack.
+  // 0.3 The ports of the stack.
   for (const [port, name] of [
     [PORTS.postgres, 'the database'],
     [PORTS.idp, 'the identity provider'],
@@ -675,13 +712,24 @@ async function main(): Promise<void> {
   const { startPostgres } = await import(
     pathToFileURL(join(DEPOT_DIR, 'scripts', 'postgres.ts')).href
   )
-  const postgres = await startPostgres({
-    dataDir: PG_DIR,
-    port: PORTS.postgres,
-    user: 'depot',
-    password: 'depot',
-    fresh: process.env.DEV_FRESH === '1',
-  })
+  let postgres: Awaited<ReturnType<typeof startPostgres>>
+  try {
+    postgres = await startPostgres({
+      dataDir: PG_DIR,
+      port: PORTS.postgres,
+      user: 'depot',
+      password: 'depot',
+      fresh: process.env.DEV_FRESH === '1',
+    })
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    if (/binaries/i.test(message)) {
+      fail(
+        `the backend of the platform did not find the binaries of PostgreSQL: they are at ${binaries.directory} — the backend looks for them in the directories of PostgreSQL of the machine`
+      )
+    }
+    fail(message)
+  }
   stopPostgres = postgres.stop
   const postmaster = join(PG_DIR, 'postmaster.pid')
   if (existsSync(postmaster)) {

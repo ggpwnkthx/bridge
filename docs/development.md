@@ -29,6 +29,18 @@ bridge/  depot/  hub/  shuttle/
 and the binaries of **PostgreSQL 15 or later** (`initdb` and `pg_ctl` in
 `/usr/lib/postgresql/15/bin` on Debian and Ubuntu).
 
+The runner looks for those binaries before it starts anything, and it
+says what is missing when the machine does not have them:
+
+```
+✗ the binaries of PostgreSQL were not found: the machine needs "initdb"
+  and "pg_ctl" — install PostgreSQL 15 or later (on Debian and Ubuntu:
+  apt install postgresql)
+```
+
+A major of PostgreSQL that the backend of the platform does not know is
+named for it, so the machine runs the server it holds.
+
 ## The dependencies of the machine
 
 The four repositories of the machine hold their own dependencies. The

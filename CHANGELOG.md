@@ -44,6 +44,12 @@ the versions follow [semantic versioning](https://semver.org).
   of the run in the command line of its parent, and the runner took
   that parent for a run of the machine that came before. The ancestors
   of a run are not runs of the machine, and they are left alone.
+- The runner of the development machine says **what the machine needs**
+  when the binaries of PostgreSQL are not on it: the message of the
+  backend of the platform named the failure without saying what to
+  install. The runner looks for the binaries before it starts
+  anything, it names the major of PostgreSQL that the backend does not
+  know, and it says how PostgreSQL is installed.
 - The session of the studio never outlives the **token of the caller**:
   the broker issues the token for a short life and the broker does not
   renew it, so a session that outlived the token held a credential that
