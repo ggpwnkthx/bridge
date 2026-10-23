@@ -46,6 +46,17 @@ const handler = async (c: Context<AppEnv>): Promise<Response> => {
         status: 401,
       })
     }
+    // The life of the session is the life of the token of the caller:
+    // the broker issues the token for a short time and the broker does
+    // not renew it, so a session that outlived the token would hold a
+    // credential that the platform refuses.
+    const ttlSeconds = sessionTtlOf(tokens.expiresIn, dependencies.config.sessionTtlSeconds)
+    if (ttlSeconds <= 0) {
+      throw new OidcError('the token of the caller is already expired', {
+        code: 'token_expired',
+        status: 401,
+      })
+    }
     const session: Session = {
       id: randomIdentifier(),
       principal: {
@@ -57,13 +68,13 @@ const handler = async (c: Context<AppEnv>): Promise<Response> => {
       },
       accessToken: tokens.accessToken,
       ...(tokens.idToken ? { idToken: tokens.idToken } : {}),
-      expiresAt: Date.now() + dependencies.config.sessionTtlSeconds * 1000,
+      expiresAt: Date.now() + ttlSeconds * 1000,
       csrfToken: randomIdentifier(24),
     }
     dependencies.sessions.set(session)
     c.header(
       'set-cookie',
-      sessionCookie(session.id, dependencies.config.sessionTtlSeconds, {
+      sessionCookie(session.id, ttlSeconds, {
         secure: dependencies.config.secureCookies,
       }),
       { append: true }
@@ -83,3 +94,17 @@ const handler = async (c: Context<AppEnv>): Promise<Response> => {
 }
 
 export default handler
+
+/**
+ * The life of a session, in seconds.
+ *
+ * It is the life of the token of the caller, when the broker named one,
+ * and the life of the configuration otherwise. A session never outlives
+ * the token it holds: the platform refuses a token that is expired, and
+ * a session that held one would be a session that cannot call anything.
+ */
+function sessionTtlOf(expiresIn: number | undefined, configured: number): number {
+  if (expiresIn === undefined) return configured
+  if (!Number.isFinite(expiresIn) || expiresIn <= 0) return 0
+  return Math.min(configured, Math.floor(expiresIn))
+}

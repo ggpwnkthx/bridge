@@ -152,6 +152,61 @@ export class BackendError extends Error {
   }
 }
 
+/**
+ * A refusal of the platform, as the studio reads it.
+ *
+ * Two services answer a refusal and they do not answer it in the same
+ * shape: the backend answers an envelope — `{"error":{"code":"…",
+ * "message":"…"},"requestId":"…"}` — and the gateway answers a flat
+ * body — `{"error":"…","message":"…"}`. The studio reads both, and it
+ * never invents a code that it did not read.
+ */
+export interface Refusal {
+  readonly code: string
+  readonly message: string
+  readonly details: readonly { field: string; code: string }[]
+  readonly requestId: string
+}
+
+/** Reads a refusal of the platform. */
+export function refusalOf(body: unknown, response: Response): Refusal {
+  const record = (body ?? {}) as {
+    error?:
+      | string
+      | { code?: string; message?: string; details?: { field: string; code: string }[] }
+    message?: string
+    requestId?: string
+  }
+  const requestId =
+    (typeof record.requestId === 'string' && record.requestId) ||
+    response.headers.get('x-request-id') ||
+    'unknown'
+  // The envelope of the backend: the code is in `error.code`.
+  if (record.error && typeof record.error === 'object') {
+    return {
+      code: record.error.code ?? 'UNKNOWN',
+      message: record.error.message ?? 'the request failed',
+      details: record.error.details ?? [],
+      requestId,
+    }
+  }
+  // The body of the gateway: the code is in `error`.
+  if (typeof record.error === 'string' && record.error.length > 0) {
+    return {
+      code: record.error,
+      message: record.message ?? 'the request failed',
+      details: [],
+      requestId,
+    }
+  }
+  return {
+    code: 'UNKNOWN',
+    message: record.message ?? 'the request failed',
+    details: [],
+    requestId,
+  }
+}
+
 /** The options of the client. */
 export interface DepotClientOptions {
   /** The base url of the gateway. */
@@ -212,20 +267,13 @@ export class DepotClient {
       }
     }
     if (!response.ok) {
-      const envelope = (body ?? {}) as {
-        error?: {
-          code?: string
-          message?: string
-          details?: { field: string; code: string }[]
-        }
-        requestId?: string
-      }
+      const refusal = refusalOf(body, response)
       throw new BackendError({
-        code: envelope.error?.code ?? 'UNKNOWN',
-        message: envelope.error?.message ?? 'the request failed',
+        code: refusal.code,
+        message: refusal.message,
         status: response.status,
-        requestId: envelope.requestId ?? 'unknown',
-        ...(envelope.error?.details ? { details: envelope.error.details } : {}),
+        requestId: refusal.requestId,
+        ...(refusal.details.length > 0 ? { details: refusal.details } : {}),
       })
     }
     return { body: body as T, status: response.status, headers: response.headers }

@@ -157,6 +157,14 @@ beforeAll(async () => {
       if (url.pathname === `/ws/${WORKSPACE}/v1/audit`) {
         return Response.json({ data: [], meta: { limit: 50, nextCursor: null } })
       }
+      if (url.pathname === `/ws/${WORKSPACE}/v1/items/expired`) {
+        // The shape of a refusal of the gateway: the code is in
+        // `error` and not in `error.code`.
+        return Response.json(
+          { error: 'unauthorized', message: 'authentication is required' },
+          { status: 401, headers: { 'x-request-id': 'the-request-of-the-gateway' } }
+        )
+      }
       return Response.json(
         { error: { code: 'NOT_FOUND', message: 'this path does not exist' } },
         { status: 404 }
@@ -182,9 +190,10 @@ function studio() {
     BRIDGE_WORKSPACES: WORKSPACE,
     BRIDGE_SECURE_COOKIES: 'false',
   })
-  return createStudioApp({
+  const sessions = new MemorySessionStore({ ttlSeconds: 600 })
+  const app = createStudioApp({
     config,
-    sessions: new MemorySessionStore({ ttlSeconds: 600 }),
+    sessions,
     logins: new MemoryLoginStateStore(),
     oidc: new OidcClient({
       hubUrl: config.hubUrl,
@@ -196,6 +205,7 @@ function studio() {
     assets: emptyAssets(),
     logger: silentLogger(),
   })
+  return { app, sessions }
 }
 
 /** The value of a cookie of an answer. */
@@ -214,7 +224,7 @@ function cookieOf(response: Response, name: string): string {
 }
 
 /** Logs a caller in and returns the cookie of the session. */
-async function login(app: ReturnType<typeof studio>): Promise<string> {
+async function login(app: ReturnType<typeof studio>['app']): Promise<string> {
   const start = await app.request('/login')
   expect(start.status).toBe(302)
   const location = start.headers.get('location') ?? ''
@@ -232,14 +242,14 @@ async function login(app: ReturnType<typeof studio>): Promise<string> {
 
 describe('the studio', () => {
   test('the probes of the deployment answer', async () => {
-    const app = studio()
+    const { app } = studio()
     const health = await app.request('/healthz')
     expect(health.status).toBe(200)
     expect((await health.json()) as { status: string }).toMatchObject({ status: 'ok' })
   })
 
   test('the api refuses a caller that is not logged in', async () => {
-    const app = studio()
+    const { app } = studio()
     const answer = await app.request(`/w/${WORKSPACE}/api/session`)
     expect(answer.status).toBe(401)
     const body = (await answer.json()) as { error: { code: string } }
@@ -247,7 +257,7 @@ describe('the studio', () => {
   })
 
   test('a login gives a session and the identity of the caller', async () => {
-    const app = studio()
+    const { app } = studio()
     const session = await login(app)
     expect(session.length).toBeGreaterThan(0)
     const answer = await app.request(`/w/${WORKSPACE}/api/session`, {
@@ -263,7 +273,7 @@ describe('the studio', () => {
   })
 
   test('the studio reads the collections of the workspace', async () => {
-    const app = studio()
+    const { app } = studio()
     const session = await login(app)
     const answer = await app.request(`/w/${WORKSPACE}/api/schema`, {
       headers: { cookie: `bridge_session=${session}` },
@@ -274,7 +284,7 @@ describe('the studio', () => {
   })
 
   test('the studio reads the rows of a collection', async () => {
-    const app = studio()
+    const { app } = studio()
     const session = await login(app)
     const answer = await app.request(`/w/${WORKSPACE}/api/items/articles`, {
       headers: { cookie: `bridge_session=${session}` },
@@ -285,7 +295,7 @@ describe('the studio', () => {
   })
 
   test('the studio refuses a query that is out of the bounds', async () => {
-    const app = studio()
+    const { app } = studio()
     const session = await login(app)
     const answer = await app.request(`/w/${WORKSPACE}/api/items/articles?limit=1000`, {
       headers: { cookie: `bridge_session=${session}` },
@@ -296,7 +306,7 @@ describe('the studio', () => {
   })
 
   test('a change of the state needs the token of the session', async () => {
-    const app = studio()
+    const { app } = studio()
     const session = await login(app)
     const answer = await app.request(`/w/${WORKSPACE}/api/items/articles`, {
       method: 'POST',
@@ -309,7 +319,7 @@ describe('the studio', () => {
   })
 
   test('a change of the state with the token of the session is sent to the backend', async () => {
-    const app = studio()
+    const { app } = studio()
     const session = await login(app)
     const info = await app.request(`/w/${WORKSPACE}/api/session`, {
       headers: { cookie: `bridge_session=${session}` },
@@ -331,7 +341,7 @@ describe('the studio', () => {
   })
 
   test('the studio refuses a workspace it does not serve', async () => {
-    const app = studio()
+    const { app } = studio()
     const session = await login(app)
     const answer = await app.request('/w/11111111-1111-4111-8111-111111111111/api/session', {
       headers: { cookie: `bridge_session=${session}` },
@@ -342,7 +352,7 @@ describe('the studio', () => {
   })
 
   test('the studio forwards the refusal of the backend', async () => {
-    const app = studio()
+    const { app } = studio()
     const session = await login(app)
     const answer = await app.request(`/w/${WORKSPACE}/api/items/unknown`, {
       headers: { cookie: `bridge_session=${session}` },
@@ -353,7 +363,7 @@ describe('the studio', () => {
   })
 
   test('a logout deletes the session', async () => {
-    const app = studio()
+    const { app } = studio()
     const session = await login(app)
     const answer = await app.request('/logout', {
       method: 'POST',
@@ -364,5 +374,37 @@ describe('the studio', () => {
       headers: { cookie: `bridge_session=${session}` },
     })
     expect(after.status).toBe(401)
+  })
+
+  test('the session does not outlive the token of the caller', async () => {
+    const { app, sessions } = studio()
+    const before = Date.now()
+    const identifier = await login(app)
+    const session = sessions.get(identifier)
+    expect(session).toBeDefined()
+    // The broker issued the token for three hundred seconds, and the
+    // session of the studio is bounded by it. The login takes a moment,
+    // and the session starts when the callback answers.
+    const life = (session?.expiresAt ?? 0) - before
+    expect(life).toBeLessThanOrEqual(302_000)
+    expect(life).toBeGreaterThan(290_000)
+  })
+
+  test('a refusal of the gateway ends the session and asks for a login', async () => {
+    const { app } = studio()
+    const session = await login(app)
+    const answer = await app.request(`/w/${WORKSPACE}/api/items/expired`, {
+      headers: { cookie: `bridge_session=${session}` },
+    })
+    expect(answer.status).toBe(401)
+    const body = (await answer.json()) as { error: { code: string } }
+    expect(body.error.code).toBe('AUTHENTICATION_REQUIRED')
+    // The session is over: the browser is sent back to the login.
+    const after = await app.request(`/w/${WORKSPACE}/api/session`, {
+      headers: { cookie: `bridge_session=${session}` },
+    })
+    expect(after.status).toBe(401)
+    const afterBody = (await after.json()) as { error: { code: string } }
+    expect(afterBody.error.code).toBe('AUTHENTICATION_REQUIRED')
   })
 })
