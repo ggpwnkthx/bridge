@@ -44,6 +44,7 @@ export function Drawer(props: {
   const [deleteArmed, setDeleteArmed] = useState(false)
   const [discardArmed, setDiscardArmed] = useState(false)
   const title = useRef<HTMLHeadingElement | null>(null)
+  const root = useRef<HTMLDivElement | null>(null)
   // The key of a creation is bound to the form of the record: a
   // creation that is sent twice answers with the same receipt, and not
   // with two records.
@@ -83,10 +84,14 @@ export function Drawer(props: {
   }, [studio.api, collection.key, id])
 
   // The drawer takes the focus when it opens.
+  //
+  // The focus is never taken from a control of the drawer: a caller
+  // who is writing in a field would lose what they wrote.
   useEffect(() => {
-    if (loading) return
+    const active = document.activeElement
+    if (active instanceof HTMLElement && root.current?.contains(active)) return
     title.current?.focus()
-  }, [loading])
+  }, [collection.key, id])
 
   const writable = useMemo(() => new Set(collection.writableFields), [collection])
   const fields = collection.fields.filter(
@@ -187,6 +192,7 @@ export function Drawer(props: {
     <div
       class="drawer"
       id="drawer"
+      ref={root}
       role="dialog"
       aria-modal="true"
       aria-labelledby="drawer-title"
