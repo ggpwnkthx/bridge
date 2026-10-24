@@ -41,9 +41,9 @@ platform and the revisions that are tested against them.
 
 | Project | Repository | Revision |
 | --- | --- | --- |
-| shuttle | https://github.com/ggpwnkthx/shuttle.git | `0e09a420f8d5f7f3e2eea63512f808ce4ae215e0` |
-| hub | https://github.com/ggpwnkthx/hub.git | `ef69e2fdd683572a68585c9234498e1cec3850f9` |
-| depot | https://github.com/ggpwnkthx/depot.git | `4ba1eed62942390296a17ec4b029803e48ebad6e` |
+| shuttle | https://github.com/ggpwnkthx/shuttle.git | `89701713e50812f000f77c5ac9313527f0be3bfe` |
+| hub | https://github.com/ggpwnkthx/hub.git | `2d923fab44ce661a8cf3adbb50a0b07863f1f60c` |
+| depot | https://github.com/ggpwnkthx/depot.git | `637c61e36e244a1c24eb02fe14d3abf4fa6a6890` |
 
 <!-- compatibility-baseline:end -->
 

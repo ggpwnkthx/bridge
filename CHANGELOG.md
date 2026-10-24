@@ -81,6 +81,19 @@ the versions follow [semantic versioning](https://semver.org).
 
 ### Changed
 
+- The baseline of the compatibility is the **newest released platform**:
+  the gateway `2.0.0`, the broker `2.0.0` and the backend `0.4.0`. The
+  two first ones are **MAJOR** releases: the gateway writes the subject
+  of the caller as it is, it decides the host of a request before its
+  method, it reads the address of the caller from the number of the
+  proxies in front of it and the ranges of the environment replace the
+  ones of the file of the routes; the broker scopes the decisions of a
+  gateway to their tenant and deprecates the shared credential of the
+  deployment. The backend reads the values of the identity as they are.
+  The studio reads the identity the same way, and it compares the subject
+  of the gateway with the subject of the session byte for byte: the
+  contracts it speaks did not change. The harness of the baseline proves
+  it: the studio speaks the contract of the baseline.
 - The studio reads the values of the identity of the gateway **as they
   are**: it never trims them and never normalizes them, because the
   signed bytes are the bytes of the headers, and a value that the studio
