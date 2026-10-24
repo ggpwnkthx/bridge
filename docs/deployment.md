@@ -68,6 +68,24 @@ credential of the caller. The studio cannot reuse it, and it does not
 try to: it holds a session of its own, and it presents the token of the
 caller to the route of the backend.
 
+## The migration of the platform
+
+The studio is proven against the gateway `2.0.0`, the broker `2.0.0` and
+the backend `0.4.0`. The two first ones are **MAJOR** releases, and a
+deployment of the studio that runs them has to read the migration of the
+platform. The studio itself needs nothing: it reads the identity of the
+gateway as the gateway writes it, and it verifies the signature with the
+key of the deployment.
+
+| The change | What a deployment has to do |
+| --- | --- |
+| The gateway writes the **subject** of the caller as it is, and refuses a subject that is empty, that carries a control character or that is longer than 512 characters with a `500`. | Nothing for the studio: the subject of the broker is a uuid, and the studio compares it with the subject of the session byte for byte. A deployment whose provider issues another kind of subject has to fix its provider. |
+| The **host** of a request is decided before its method, and the ranges of the trusted proxies of the environment **replace** the ones of the file of the routes. | Nothing for the studio: its two routes share one host. A deployment whose catch-all names `GET` and answers for the host of the studio has to move that host to the catch-all, or to name the methods the host does not answer. |
+| The address of the caller is read from the **number** of the proxies in front of the gateway, and not from the ranges of the trusted proxies. The new variable is `SHUTTLE_TRUSTED_PROXY_HOPS` (one by default). | A deployment with more than one proxy in front of the gateway has to name the number of them. A deployment with one proxy — the usual one — has nothing to do. |
+| The users of the shared state in Redis are written by the deployment at every start, and the file of the roles no longer holds their passwords. | A deployment of the gateway with Redis writes the two passwords after the server started. The studio does not touch the shared state of the gateway. |
+| The decisions of a **gateway** are scoped to their tenant, and the shared credential of the deployment is deprecated. | The gateway of the platform presents the shared credential of the deployment; the broker answers the decision and writes a warning. It is the only scheme the gateway speaks today. The studio holds a credential of the **tenant** and it uses it for the login of the callers only: it never asks the broker for a decision. |
+| The backend of the platform reads the values of the identity **as they are** and refuses the ones the gateway did not write. | Nothing for the studio: it reads the identity the same way, and it refuses a header that appears twice. |
+
 ## The configuration of the broker
 
 The studio is a **client** of the broker, like the gateway is. It needs a

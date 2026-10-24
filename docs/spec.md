@@ -86,12 +86,27 @@ that the gateway writes into the headers of the request.
    gateway removed the symmetric format `v4` in its `1.0` release, and
    the studio does not accept a signature that anybody with the derived
    key could write.
-3. A deployment that gave a key to the studio refuses a request whose
+3. The protected header of the signature has to name the algorithm of the
+   version (`ES256`) and the type of the signature
+   (`shuttle-identity`). A signature of another kind is never verified
+   with the key of the deployment, and there is no fallback from one
+   algorithm to another.
+4. A deployment that gave a key to the studio refuses a request whose
    signature does not verify, and a production environment refuses a
    request that carries no signature at all.
-4. The subject of the gateway and the subject of the session have to be
-   the same: the caller of the gateway is the one who logged in.
-5. When the deployment binds the workspace, the workspace of the
+5. The studio reads the values of the identity **as they are**: it never
+   trims them and never normalizes them. The signed bytes are the bytes
+   of the headers, and a value that the studio rewrote would rebuild a
+   payload that the gateway never signed.
+6. A header of the identity that appears twice is refused: the gateway
+   writes every identity header once, and a repeated header is an attempt
+   to make the reader pick the value that fits.
+7. The subject of the gateway and the subject of the session have to be
+   the same, byte for byte: the caller of the gateway is the one who
+   logged in. The gateway of the release `2.0.0` writes the subject of
+   the caller as it is — it never rewrites it — and the studio never
+   rewrites it either.
+8. When the deployment binds the workspace, the workspace of the
    identity of the gateway has to be the workspace of the studio: the
    gateway decides which workspace a caller uses.
 

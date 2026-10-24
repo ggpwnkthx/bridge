@@ -134,4 +134,60 @@ describe('the identity of the gateway', () => {
     expect(result.ok).toBe(false)
     if (!result.ok) expect(result.reason).toContain('v4')
   })
+
+  test('it reads the values of the identity as they are', async () => {
+    const { key, values, pair } = await deployment()
+    // The gateway of the release `2.0.0` writes the identity as it is:
+    // the studio never trims a value and never normalizes it, because
+    // the signed bytes are the bytes of the header. A role that carries
+    // a space is the case that tells: the studio cuts the list on the
+    // commas and it keeps the role as it is.
+    const roles = ['reader', ' editor']
+    const headers = headersOf({ ...values, 'x-shuttle-roles': roles.join(',') })
+    headers.set(
+      'x-shuttle-signature',
+      await sign('v5', pair.privateKey, { ...values, 'x-shuttle-roles': roles.join(',') }, request)
+    )
+    const result = await verifyGatewayIdentity(request, headers, key)
+    expect(result.ok).toBe(true)
+    if (result.ok) expect(result.identity.roles).toEqual(roles)
+  })
+
+  test('it refuses a header that appears twice', async () => {
+    const { key, values, pair } = await deployment()
+    const headers = headersOf(values)
+    headers.set('x-shuttle-signature', await sign('v5', pair.privateKey, values, request))
+    // A repeated header is an attempt to make the reader pick the value
+    // that fits: the studio refuses it, like the backend of the platform.
+    headers.append('x-shuttle-user', 'someone-else')
+    const result = await verifyGatewayIdentity(request, headers, key)
+    expect(result.ok).toBe(false)
+    if (!result.ok) expect(result.reason).toContain('more than once')
+  })
+
+  test('it refuses a signature of another kind', async () => {
+    const { key, values, pair } = await deployment()
+    const headers = headersOf(values)
+    // The protected header names what the signature is about: a
+    // signature of another kind is never verified with the key of the
+    // deployment.
+    const payload = canonicalPayload(
+      {
+        subject: values['x-shuttle-user'] ?? '',
+        ...(values['x-shuttle-email'] ? { email: values['x-shuttle-email'] } : {}),
+        roles: (values['x-shuttle-roles'] ?? '').split(',').filter((role) => role.length > 0),
+        ...(values['x-shuttle-workspace'] ? { workspaceId: values['x-shuttle-workspace'] } : {}),
+      },
+      request,
+      'v5'
+    )
+    const jws = await new CompactSign(new TextEncoder().encode(payload))
+      .setProtectedHeader({ alg: 'ES256', typ: 'another-kind' })
+      .sign(pair.privateKey)
+    const [protectedHeader, , signature] = jws.split('.')
+    headers.set('x-shuttle-signature', `v5=${protectedHeader}..${signature}`)
+    const result = await verifyGatewayIdentity(request, headers, key)
+    expect(result.ok).toBe(false)
+    if (!result.ok) expect(result.reason).toContain('another-kind')
+  })
 })
